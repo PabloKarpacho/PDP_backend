@@ -1,0 +1,112 @@
+version: '3.8'
+
+services:
+  pdp-db:
+    image: postgres:13
+    container_name: postgres_db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_MULTIPLE_DATABASES: ${KC_DB_NAME}, ${POSTGRES_DB}
+    ports:
+      - '${POSTGRES_PORT}:${POSTGRES_PORT}'
+    env_file:
+      - ".env"
+    volumes:
+      - ./postgres-init/init-multiple-db.sh:/docker-entrypoint-initdb.d/init-multiple-db.sh
+    networks:
+      - pdp-network
+
+  pdp-pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+    ports:
+      - "8081:80"
+    env_file:
+      - ".env"
+    depends_on:
+      - pdp-db
+    volumes:
+      - ./servers.json:/pgadmin4/servers.json
+    networks:
+      - pdp-network
+
+  pdp-minio:
+    image: quay.io/minio/minio
+    container_name: minio
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "9000:9000"
+      - "7001:7001"
+    env_file:
+      - ".env"
+    volumes:
+      - ./data/minio:/data
+    networks:
+      - pdp-network
+    command: server /data --console-address ":7001"
+
+  pdp-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: backend
+    ports:
+      - "${APP_PORT}:${APP_PORT}"
+    env_file:
+      - ".env"
+    depends_on:
+      - pdp-db
+      - pdp-minio
+    environment:
+      POSTGRESQL_DSN: ${POSTGRESQL_DSN}
+    volumes:
+      - .:/app
+    networks:
+      - pdp-network
+
+  pdp-keycloak:
+    image: quay.io/keycloak/keycloak:23.0.7
+    container_name: keycloak
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://pdp-db:5432/${KC_DB_NAME}
+      KC_DB_USERNAME: ${POSTGRES_USER}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      KC_DB_NAME: ${KC_DB_NAME}
+      
+      KC_HOSTNAME: localhost
+      KC_HOSTNAME_PORT: 8080
+      KC_HOSTNAME_STRICT: false
+      KC_HOSTNAME_STRICT_HTTPS: false
+      
+      KC_LOG_LEVEL: info
+      KC_METRICS_ENABLED: true
+      KC_HEALTH_ENABLED: true
+      KC_FEATURES: declarative-user-profile
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    ports:
+      - "8080:8080"
+    env_file:
+      - ".env"
+    depends_on:
+      - pdp-db
+    networks:
+      - pdp-network
+    volumes:
+      - ./realm-export.json:/opt/keycloak/data/import/realm-export.json
+    command: start-dev --http-enabled=true --import-realm
+
+networks:
+  pdp-network:
+    name: pdp-network
+    driver: bridge
+
+volumes:
+  postgres-init:

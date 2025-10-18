@@ -16,6 +16,14 @@ services:
       - ./postgres-init/init-multiple-db.sh:/docker-entrypoint-initdb.d/init-multiple-db.sh
     networks:
       - pdp-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
 
   pdp-pgadmin:
     image: dpage/pgadmin4
@@ -33,6 +41,14 @@ services:
       - ./servers.json:/pgadmin4/servers.json
     networks:
       - pdp-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
 
   pdp-minio:
     image: quay.io/minio/minio
@@ -50,6 +66,14 @@ services:
     networks:
       - pdp-network
     command: server /data --console-address ":7001"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.4'
+          memory: 320M
+        reservations:
+          cpus: '0.2'
+          memory: 160M
 
   pdp-backend:
     build:
@@ -69,6 +93,14 @@ services:
       - .:/app
     networks:
       - pdp-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
 
   pdp-keycloak:
     image: quay.io/keycloak/keycloak:23.0.7
@@ -102,6 +134,14 @@ services:
     volumes:
       - ./realm-export.json:/opt/keycloak/data/import/realm-export.json
     command: start-dev --http-enabled=true --import-realm
+    deploy: 
+      resources: 
+        limits: 
+          cpus: '0.7' 
+          memory: 768M 
+        reservations: 
+          cpus: '0.3' 
+          memory: 512M
 
 networks:
   pdp-network:

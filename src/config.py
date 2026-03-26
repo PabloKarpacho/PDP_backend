@@ -24,7 +24,7 @@ class Config:
 
     #DATABASE
 
-    POSTGRESQL_DSN = os.getenv("POSTGRESQL_DSN", "postgresql+psycopg2://lil_antoha_big_smoke:lil_antoha_big_smoke@db:5432/PDP")
+    POSTGRESQL_DSN = os.getenv("POSTGRESQL_DSN", "postgresql+asyncpg://postgres:postgres@localhost:5432/pdp")
 
     #AUTH
 
@@ -46,7 +46,7 @@ class Config:
     
     #FILES
 
-    MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT",  "0.0.0.0:7000")
+    MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT",  "localhost:9000")
     MINIO_ROOT_USER = os.getenv("MINIO_ROOT_USER",  "ROOTNAME")
     MINIO_ROOT_PASSWORD = os.getenv("MINIO_ROOT_PASSWORD",  "CHANGEME123")
     MINIO_FILES_BUCKET_NAME = os.getenv("MINIO_FILES_BUCKET_NAME",  "pdp-files")
@@ -54,7 +54,7 @@ class Config:
 
     #KEYCLOACK
     
-    KEYCLOACK_HOST_URL = os.getenv("KEYCLOACK_HOST_URL", "http://keycloak:8080")
+    KEYCLOACK_HOST_URL = os.getenv("KEYCLOACK_HOST_URL", "http://localhost:8080")
     KEYCLOACK_PUBLIC_URL = os.getenv("KEYCLOACK_PUBLIC_URL", "http://localhost:8080")
     KEYCLOACK_REALM = os.getenv("KEYCLOACK_REALM", "pdp")
     KEYCLOACK_CLIENT_ID = os.getenv("KEYCLOACK_CLIENT_ID", "fastapi-client")

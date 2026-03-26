@@ -1,10 +1,12 @@
 from typing import List
 from fastapi import APIRouter, HTTPException, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 
 from src.models import HomeworkDAO, UserDAO
-from src.database_control.db import get_db
+from src.database_control.postgres import get_db
 from src.routers.Homework.schemas import (
     HomeworkCreateSchema,
     HomeworkGetSchema,
@@ -19,15 +21,15 @@ router = APIRouter(prefix=PREFIX, tags=["Homeworks"])
 
 
 @router.get("/{id}")
-def get_homework(
-    id: int, user: UserDAO = Depends(get_user), db: Session = Depends(get_db)
+async def get_homework(
+    id: int, user: UserDAO = Depends(get_user), db: AsyncSession = Depends(get_db)
 ) -> HomeworkGetSchema | None:
-
-    homework = (
-        db.query(HomeworkDAO)
-        .filter(HomeworkDAO.id == id, HomeworkDAO.is_deleted == False)
-        .first()
+    result = await db.execute(
+        select(HomeworkDAO)
+        .options(selectinload(HomeworkDAO.lesson))
+        .where(HomeworkDAO.id == id, HomeworkDAO.is_deleted.is_(False))
     )
+    homework = result.scalar_one_or_none()
 
     if not homework:
         raise HTTPException(404, "Homework not found")

@@ -1,13 +1,15 @@
 import datetime
 from typing import List
 from fastapi import APIRouter, HTTPException, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from src.config import CONFIG
 from src.logger import logger
 
 from src.models import LessonDAO, UserDAO
-from src.database_control.db import get_db
+from src.database_control.postgres import get_db
 from src.dependencies import get_user
 from src.constants import Roles
 from src.routers.Lessons.schemas import LessonGetSchema, LessonCreateSchema, LessonUpdateSchema
@@ -19,30 +21,31 @@ router = APIRouter(prefix=PREFIX, tags=["Lessons"])
 
 
 @router.get("")
-def get_lessons(
+async def get_lessons(
     user: UserDAO = Depends(get_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     start_time: datetime.datetime | None = None,
     end_time: datetime.datetime | None = None,
 ) -> List[LessonGetSchema | None]:
-
-    # base query by role
+    statement = select(LessonDAO).options(selectinload(LessonDAO.homework))
     if user.role == Roles.STUDENT:
-        query = db.query(LessonDAO).filter(
-            LessonDAO.student_id == user.id, LessonDAO.is_deleted == False
+        statement = statement.where(
+            LessonDAO.student_id == user.id, LessonDAO.is_deleted.is_(False)
         )
     elif user.role == Roles.TEACHER:
-        query = db.query(LessonDAO).filter(
-            LessonDAO.teacher_id == user.id, LessonDAO.is_deleted == False
+        statement = statement.where(
+            LessonDAO.teacher_id == user.id, LessonDAO.is_deleted.is_(False)
         )
+    else:
+        return []
 
-    # time range filters
     if start_time is not None:
-        query = query.filter(LessonDAO.start_time >= start_time)
+        statement = statement.where(LessonDAO.start_time >= start_time)
     if end_time is not None:
-        query = query.filter(LessonDAO.end_time <= end_time)
+        statement = statement.where(LessonDAO.end_time <= end_time)
 
-    lessons = query.all()
+    result = await db.execute(statement)
+    lessons = result.scalars().all()
 
     result = []
 
@@ -69,10 +72,10 @@ def get_lessons(
 
 
 @router.post("/create")
-def create_lesson(
+async def create_lesson(
     lesson: LessonCreateSchema,
     user: UserDAO = Depends(get_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> LessonGetSchema:
     if user.role == Roles.STUDENT:
         raise HTTPException(403, "Forbidden")
@@ -88,9 +91,9 @@ def create_lesson(
             status=lesson.status,
         )
         db.add(lesson_dao)
-        db.commit()
+        await db.commit()
 
-        db.refresh(lesson_dao)
+        await db.refresh(lesson_dao)
 
         lesson_schema = LessonGetSchema(
             id=lesson_dao.id,
@@ -111,17 +114,18 @@ def create_lesson(
 
 
 @router.put("/update/{lesson_id}")
-def update_lesson(
+async def update_lesson(
     lesson: LessonUpdateSchema,
     lesson_id: int,
     user: UserDAO = Depends(get_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> LessonGetSchema:
     if user.role == Roles.STUDENT:
         raise HTTPException(403, "Forbidden")
 
     if user.role == Roles.TEACHER:
-        lesson_dao = db.query(LessonDAO).filter(LessonDAO.id == lesson_id).first()
+        result = await db.execute(select(LessonDAO).where(LessonDAO.id == lesson_id))
+        lesson_dao = result.scalar_one_or_none()
 
         if not lesson_dao:
             raise HTTPException(404, "Lesson not found")
@@ -130,8 +134,8 @@ def update_lesson(
         for field, value in update_data.items():
             setattr(lesson_dao, field, value)
 
-        db.commit()
-        db.refresh(lesson_dao)
+        await db.commit()
+        await db.refresh(lesson_dao)
 
         lesson_schema = LessonGetSchema(
             id=lesson_dao.id,
@@ -151,16 +155,21 @@ def update_lesson(
 
 
 @router.delete("/delete/{lesson_id}")
-def delete_lesson(
+async def delete_lesson(
     lesson_id: int,
     user: UserDAO = Depends(get_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> int:
     if user.role == Roles.STUDENT:
         raise HTTPException(403, "Forbidden")
 
     if user.role == Roles.TEACHER:
-        lesson_dao = db.query(LessonDAO).filter(LessonDAO.id == lesson_id).first()
+        result = await db.execute(
+            select(LessonDAO)
+            .options(selectinload(LessonDAO.homework))
+            .where(LessonDAO.id == lesson_id)
+        )
+        lesson_dao = result.scalar_one_or_none()
 
         if not lesson_dao:
             raise HTTPException(404, "Lesson not found")
@@ -170,6 +179,6 @@ def delete_lesson(
         if lesson_dao.homework:
             lesson_dao.homework.is_deleted = True
 
-        db.commit()
+        await db.commit()
 
         return lesson_dao.id

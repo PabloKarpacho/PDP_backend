@@ -87,10 +87,13 @@ services:
     depends_on:
       - pdp-db
       - pdp-minio
+      - pdp-keycloak
     environment:
-      POSTGRESQL_DSN: ${POSTGRESQL_DSN}
+      POSTGRESQL_DSN: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@pdp-db:${POSTGRES_PORT}/${POSTGRES_DB}
+      MINIO_ENDPOINT: pdp-minio:9000
+      KEYCLOACK_HOST_URL: http://pdp-keycloak:8080
     volumes:
-      - .:/app
+      - .:/work
     networks:
       - pdp-network
     deploy:

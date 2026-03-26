@@ -1,38 +1,34 @@
-# Use Python 3.10 slim image
-FROM python:3.10.12-slim
+FROM python:3.12-slim
 
-# Set environment variables to prevent .pyc files and buffered output
+COPY --from=ghcr.io/astral-sh/uv:0.8.17 /uv /uvx /bin/
+
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
+ENV UV_COMPILE_BYTECODE=1
+ENV UV_LINK_MODE=copy
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
-# Update and upgrade system packages, install curl
+WORKDIR /work
+
 RUN apt-get update -y && \
     apt-get install -y --no-install-recommends gcc curl && \
     apt-get upgrade -y && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Upgrade pip
-RUN python -m pip install --upgrade pip
+COPY pyproject.toml uv.lock README.md ./
 
-# Set the working directory
-WORKDIR /work
+RUN uv sync --frozen --no-dev --no-install-project
 
-# Copy the src directory
 COPY src ./src
+COPY scripts ./scripts
+COPY __init__.py ./
 
-# Copy application files
-COPY requirements/build.txt requirements.txt
+RUN chmod +x ./scripts/run-backend.sh
 
-# Install dependencies
-RUN pip install -r requirements.txt
-
-# Create a user for running the application
-RUN useradd appuser && chown -R appuser /work
+RUN useradd --create-home appuser && chown -R appuser:appuser /work
 USER appuser
 
-# Expose the correct port
 EXPOSE 8000
 
-# Command to run the FastAPI app with uvicorn
-CMD ["uvicorn", "src.app:app", "--host", "0.0.0.0", "--port", "8000"]
-
+CMD ["./scripts/run-backend.sh"]

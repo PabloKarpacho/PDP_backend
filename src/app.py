@@ -13,9 +13,8 @@ from contextlib import asynccontextmanager
 
 from src.config import CONFIG
 from src.logger import logger
-from src.models import Base
-from src.database_control.db import engine
-from src.database_control.s3 import MinioHandler
+from src.database_control.postgres import init_models
+from src.database_control.s3 import ensure_bucket_exists
 
 
 
@@ -55,14 +54,14 @@ class CustomMiddleware(BaseHTTPMiddleware):
 async def lifespan(app: FastAPI):
     # Создаем таблицы при запуске приложения
     try:
-        Base.metadata.create_all(bind=engine)
+        await init_models()
         print("Tables created successfully.")
     except SQLAlchemyError as e:
         print(f"Error creating tables: {e}")
 
     # Создаем бакет с файлами
     try:
-        MinioHandler(bucket=CONFIG.MINIO_FILES_BUCKET_NAME)
+        await ensure_bucket_exists(CONFIG.MINIO_FILES_BUCKET_NAME)
     except Exception as e:
         raise e
 

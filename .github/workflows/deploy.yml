@@ -12,6 +12,22 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: pdp
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d pdp"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      POSTGRESQL_DSN: postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/pdp
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -27,11 +43,14 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen --no-dev
 
+      - name: Run Alembic migrations
+        run: uv run python -m alembic upgrade head
+
       - name: Compile project
         run: uv run python -m compileall src tests __init__.py
 
       - name: Run unit tests
-        run: uv run pytest tests
+        run: uv run python -m pytest tests
 
   deploy:
     runs-on: ubuntu-latest

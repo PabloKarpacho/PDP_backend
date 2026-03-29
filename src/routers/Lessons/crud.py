@@ -7,6 +7,22 @@ from sqlalchemy.orm import selectinload
 from src.models import LessonDAO
 
 
+def _normalize_datetime_to_utc(value: datetime.datetime) -> datetime.datetime:
+    """Normalize a datetime value to timezone-aware UTC.
+
+    Args:
+        value: Source datetime value from API input or filters.
+
+    Returns:
+        Datetime converted to UTC with timezone information preserved.
+        Naive values are treated as UTC.
+    """
+    if value.tzinfo is None:
+        return value.replace(tzinfo=datetime.timezone.utc)
+
+    return value.astimezone(datetime.timezone.utc)
+
+
 def _apply_lesson_filters(
     statement,
     *,
@@ -41,9 +57,11 @@ def _apply_lesson_filters(
         statement = statement.where(LessonDAO.student_id == student_id)
 
     if start_time is not None:
+        start_time = _normalize_datetime_to_utc(start_time)
         statement = statement.where(LessonDAO.start_time >= start_time)
 
     if end_time is not None:
+        end_time = _normalize_datetime_to_utc(end_time)
         statement = statement.where(LessonDAO.end_time <= end_time)
 
     if not include_deleted:
@@ -153,9 +171,12 @@ async def create_lesson(
     Returns:
         Created lesson ORM object after commit and refresh.
     """
+    normalized_start_time = _normalize_datetime_to_utc(start_time)
+    normalized_end_time = _normalize_datetime_to_utc(end_time)
+
     lesson = LessonDAO(
-        start_time=start_time,
-        end_time=end_time,
+        start_time=normalized_start_time,
+        end_time=normalized_end_time,
         theme=theme,
         lesson_description=lesson_description,
         teacher_id=teacher_id,
@@ -200,7 +221,19 @@ async def update_lesson(
     if lesson is None:
         return None
 
-    for field, value in update_data.items():
+    normalized_update_data = dict(update_data)
+
+    if "start_time" in normalized_update_data and normalized_update_data["start_time"] is not None:
+        normalized_update_data["start_time"] = _normalize_datetime_to_utc(
+            normalized_update_data["start_time"]
+        )
+
+    if "end_time" in normalized_update_data and normalized_update_data["end_time"] is not None:
+        normalized_update_data["end_time"] = _normalize_datetime_to_utc(
+            normalized_update_data["end_time"]
+        )
+
+    for field, value in normalized_update_data.items():
         setattr(lesson, field, value)
 
     await db.commit()

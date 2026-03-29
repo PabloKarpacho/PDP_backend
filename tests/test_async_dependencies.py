@@ -1,8 +1,10 @@
 from types import SimpleNamespace
 
 import pytest
+from fastapi import HTTPException
 
-from src.dependencies import get_user
+from src.constants import Roles
+from src.dependencies import get_teacher, get_user
 from src.schemas import KeycloakUser
 
 
@@ -74,3 +76,61 @@ async def test_get_user_creates_user_when_missing():
     assert len(session.added) == 1
     assert session.commit_calls == 1
     assert session.refresh_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_get_teacher_returns_existing_teacher_from_keycloak_role():
+    existing_user = SimpleNamespace(id="teacher-1")
+    session = FakeAsyncSession(existing_user=existing_user)
+    keycloak_user = KeycloakUser(
+        id="teacher-1",
+        username="teacher",
+        email="teacher@example.com",
+        last_name="User",
+        role=Roles.TEACHER,
+        realm_roles=[],
+    )
+
+    result = await get_teacher(keycloak_user=keycloak_user, db=session)
+
+    assert result is existing_user
+    assert session.added == []
+    assert session.commit_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_get_teacher_uses_keycloak_realm_role():
+    existing_user = SimpleNamespace(id="teacher-2")
+    session = FakeAsyncSession(existing_user=existing_user)
+    keycloak_user = KeycloakUser(
+        id="teacher-2",
+        username="teacher",
+        email="teacher2@example.com",
+        last_name="User",
+        role=None,
+        realm_roles=[Roles.TEACHER],
+    )
+
+    result = await get_teacher(keycloak_user=keycloak_user, db=session)
+
+    assert result is existing_user
+
+
+@pytest.mark.asyncio
+async def test_get_teacher_raises_for_non_teacher():
+    session = FakeAsyncSession(existing_user=None)
+    keycloak_user = KeycloakUser(
+        id="student-1",
+        username="student",
+        email="student@example.com",
+        last_name="User",
+        role=Roles.STUDENT,
+        realm_roles=[Roles.STUDENT],
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_teacher(keycloak_user=keycloak_user, db=session)
+
+    assert exc_info.value.status_code == 403
+    assert session.added == []
+    assert session.commit_calls == 0

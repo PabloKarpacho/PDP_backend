@@ -37,6 +37,40 @@ docker compose up -d --build
 docker compose ps
 ```
 
+## Миграции Alembic
+
+Применить все миграции:
+
+```bash
+uv run python -m alembic upgrade head
+```
+
+Проверить текущую ревизию:
+
+```bash
+uv run python -m alembic current
+```
+
+Создать новую миграцию:
+
+```bash
+uv run python -m alembic revision -m "your migration name"
+```
+
+Если нужно сгенерировать миграцию по изменениям моделей:
+
+```bash
+uv run python -m alembic revision --autogenerate -m "describe changes"
+```
+
+CI автоматически запускает:
+
+```bash
+uv run python -m alembic upgrade head
+```
+
+Приложение при старте тоже применяет миграции автоматически.
+
 ## Полезные URL
 
 - Backend: `http://localhost:8000`

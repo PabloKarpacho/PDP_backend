@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models import LessonDAO, UserDAO
 from src.database_control.postgres import get_db
 from src.dependencies import get_user, get_teacher
+from src.logger import logger
 from src.constants import Roles
 from src.routers.Lessons.schemas import LessonGetSchema, LessonCreateSchema, LessonUpdateSchema
 from src.routers.Lessons.crud import (
@@ -74,10 +75,12 @@ def _get_lesson_update_data(lesson: LessonUpdateSchema) -> dict:
     Returns:
         Dictionary with mutable lesson fields only.
     """
-    return lesson.model_dump(
+    payload = lesson.model_dump(
         exclude_unset=True,
         exclude={"teacher_id", "is_deleted", "updated_at", "created_at"},
     )
+    logger.info(f"Prepared lesson update payload: {payload}")
+    return payload
 
 
 @router.get("")
@@ -127,6 +130,7 @@ async def update_lesson(
     user: UserDAO = Depends(get_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> LessonGetSchema:
+    logger.info(f"Received update request for lesson {lesson_id} with data: {lesson}")
     lesson_dao = await update_lesson_record(
         db,
         lesson_id=lesson_id,

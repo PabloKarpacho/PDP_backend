@@ -18,6 +18,10 @@ class Logger:
         record = f"ОШИБКА: {record}"
         self.info(record, extra)
 
+    def debug(self, record: str, extra: dict = None):
+        record = f"DEBUG: {record}"
+        self.info(record, extra)
+
     def info(self, record: str, extra: dict = None):
         self.logs.append(record)
         if extra:

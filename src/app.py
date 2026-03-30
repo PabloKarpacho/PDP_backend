@@ -25,10 +25,25 @@ from src.routers import lesson_router
 routers = [user_router, lesson_router]
 class CustomMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-
         start_time = time.time()
-
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except Exception as exc:
+            end_time = time.time()
+            time_taken = end_time - start_time
+            tb_str = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+            logger.error(
+                f"Unhandled exception while processing request: {tb_str}",
+                extra={
+                    "http_status_code": 500,
+                    "time_taken": time_taken,
+                    "method": request.method,
+                    "host": request.url.netloc,
+                    "path": request.url.path,
+                },
+            )
+            logger.dump()
+            raise
 
         end_time = time.time()
         time_taken = end_time - start_time
@@ -97,6 +112,19 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     logger.error(f"""Exception detail: {exc.detail}\nTraceback: {tb_str}""")
     return JSONResponse(
         status_code=exc.status_code, content={"message": f"{exc.detail}"}
+    )
+
+
+@app.exception_handler(Exception)
+async def unexpected_exception_handler(request: Request, exc: Exception):
+    tb_str = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+    logger.error(
+        f"Unhandled server error on {request.method} {request.url.path}\nTraceback: {tb_str}"
+    )
+    logger.dump()
+    return JSONResponse(
+        status_code=500,
+        content={"message": "Internal Server Error"},
     )
 
 @app.get("/actuator/health/liveness", status_code=200)

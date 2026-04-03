@@ -1,70 +1,90 @@
-import os
-
+from pydantic import AliasChoices
+from pydantic import Field
+from pydantic_settings import BaseSettings
+from pydantic_settings import SettingsConfigDict
 from dotenv import find_dotenv
-from dotenv import load_dotenv
+
 from src.schemas import authConfiguration
 
-if not load_dotenv(find_dotenv("/work/config/env.file")):
-    load_dotenv(find_dotenv())
+
+_ENV_FILE = find_dotenv("/work/config/env.file") or find_dotenv() or None
 
 
-class Config:
-    ENV = "production"
-    PROJECT_NAME = "fastapi-best-practices"
-    APP_PORT = int(os.getenv("APP_PORT", 8080))
-    APP_HOST = os.getenv("APP_HOST", "0.0.0.0")
-    APP_WORKERS = int(os.getenv("APP_WORKERS", 1))
-    SEND_LOGS_TO_GRAYLOG: bool = os.getenv("SEND_LOGS_TO_GRAYLOG", "False").lower() in (
-        "true",
-        "1",
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=_ENV_FILE,
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+        extra="ignore",
     )
-    GRAYLOG_HOST = os.getenv("GRAYLOG_HOST", "ml-dev1.dohod.local")
-    GRAYLOG_PORT = int(os.getenv("GRAYLOG_PORT", 12201))
+
+    ENV: str = "production"
+    PROJECT_NAME: str = "fastapi-best-practices"
+    APP_PORT: int = 8080
+    APP_HOST: str = "0.0.0.0"
+    APP_WORKERS: int = 1
+    SEND_LOGS_TO_GRAYLOG: bool = False
+    GRAYLOG_HOST: str = "ml-dev1.dohod.local"
+    GRAYLOG_PORT: int = 12201
 
     # DATABASE
-
-    POSTGRESQL_DSN = os.getenv(
-        "POSTGRESQL_DSN", "postgresql+asyncpg://postgres:postgres@localhost:5432/pdp"
-    )
+    POSTGRESQL_DSN: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/pdp"
 
     # AUTH
-
-    SECRET_KEY = os.getenv(
-        "SECRET_KEY", "gV64m9aIzFG4qpgVphvQbPQrtAO0nM-7YwwOvu0XPt5KJOjAy4AfgLkqJXYEt"
-    )
-    ALGORITHM = os.getenv("ALGORITHM", "HS256")
-    ACCESS_TOKEN_EXPIRE_MINUTES = 30
+    SECRET_KEY: str = "gV64m9aIzFG4qpgVphvQbPQrtAO0nM-7YwwOvu0XPt5KJOjAy4AfgLkqJXYEt"
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
     # MAIL
-
-    SMTP_SERVER = os.getenv("SMTP_HOST", "smtp.yandex.ru")
-    SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
-    SMTP_USER = os.getenv("SMTP_USER", "karpoffpasha@yandex.ru")
-    SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "wjjuemuicfnpwxsj")
+    SMTP_SERVER: str = Field(
+        default="smtp.yandex.ru",
+        validation_alias=AliasChoices("SMTP_HOST", "SMTP_SERVER"),
+    )
+    SMTP_PORT: int = 465
+    SMTP_USER: str = "karpoffpasha@yandex.ru"
+    SMTP_PASSWORD: str = "wjjuemuicfnpwxsj"
 
     # USER
-
-    ROLES_HASHMAP = {"teacher": {"is_teacher": True}, "student": {"is_student": True}}
+    ROLES_HASHMAP: dict[str, dict[str, bool]] = {
+        "teacher": {"is_teacher": True},
+        "student": {"is_student": True},
+    }
 
     # FILES
-
-    MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "localhost:9000")
-    MINIO_ROOT_USER = os.getenv("MINIO_ROOT_USER", "ROOTNAME")
-    MINIO_ROOT_PASSWORD = os.getenv("MINIO_ROOT_PASSWORD", "CHANGEME123")
-    MINIO_FILES_BUCKET_NAME = os.getenv("MINIO_FILES_BUCKET_NAME", "pdp-files")
-    MINIO_SECURE = os.getenv("MINIO_SECURE", False)
+    MINIO_ENDPOINT: str = "localhost:9000"
+    MINIO_ROOT_USER: str = "ROOTNAME"
+    MINIO_ROOT_PASSWORD: str = "CHANGEME123"
+    MINIO_FILES_BUCKET_NAME: str = "pdp-files"
+    MINIO_SECURE: bool = False
 
     # KEYCLOACK
+    KEYCLOACK_HOST_URL: str = Field(
+        default="http://localhost:8080",
+        validation_alias=AliasChoices("KEYCLOACK_HOST_URL", "KEYCLOAK_HOST_URL"),
+    )
+    KEYCLOACK_PUBLIC_URL: str = Field(
+        default="http://localhost:8080",
+        validation_alias=AliasChoices("KEYCLOACK_PUBLIC_URL", "KEYCLOAK_PUBLIC_URL"),
+    )
+    KEYCLOACK_REALM: str = Field(
+        default="pdp",
+        validation_alias=AliasChoices("KEYCLOACK_REALM", "KEYCLOAK_REALM"),
+    )
+    KEYCLOACK_CLIENT_ID: str = Field(
+        default="fastapi-client",
+        validation_alias=AliasChoices("KEYCLOACK_CLIENT_ID", "KEYCLOAK_CLIENT_ID"),
+    )
+    KEYCLOACK_CLIENT_SECRET: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "KEYCLOACK_CLIENT_SECRET",
+            "KEYCLOAK_CLIENT_SECRET",
+        ),
+    )
+    KEYCLOAK_ENABLE: bool = True
 
-    KEYCLOACK_HOST_URL = os.getenv("KEYCLOACK_HOST_URL", "http://localhost:8080")
-    KEYCLOACK_PUBLIC_URL = os.getenv("KEYCLOACK_PUBLIC_URL", "http://localhost:8080")
-    KEYCLOACK_REALM = os.getenv("KEYCLOACK_REALM", "pdp")
-    KEYCLOACK_CLIENT_ID = os.getenv("KEYCLOACK_CLIENT_ID", "fastapi-client")
-    KEYCLOACK_CLIENT_SECRET = os.getenv("KEYCLOACK_CLIENT_SECRET", "")
-    KEYCLOAK_ENABLE = os.getenv("KEYCLOAK_ENABLE", True)
 
-
-CONFIG = Config()
+CONFIG = Settings()
 
 settings = authConfiguration(
     server_url=CONFIG.KEYCLOACK_HOST_URL,

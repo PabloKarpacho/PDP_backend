@@ -28,3 +28,8 @@ dependencies = [
     "graypy>=2.1.0",
     "python-keycloak==5.8.1",
 ]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: tests that require external services such as PostgreSQL",
+]

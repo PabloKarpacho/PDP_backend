@@ -18,11 +18,12 @@ from src.database_control.s3 import ensure_bucket_exists
 
 
 
+from src.routers import homework_router
 from src.routers import user_router
 from src.routers import lesson_router
 
 
-routers = [user_router, lesson_router]
+routers = [user_router, lesson_router, homework_router]
 class CustomMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         start_time = time.time()
@@ -93,6 +94,7 @@ app.add_middleware(CustomMiddleware)
 
 app.include_router(user_router)
 app.include_router(lesson_router)
+app.include_router(homework_router)
 
 
 origins = ["*"]

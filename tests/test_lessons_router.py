@@ -83,6 +83,52 @@ async def test_get_lessons_for_student_passes_student_filter(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_get_lessons_returns_only_lessons_in_requested_time_range(monkeypatch):
+    requested_start = datetime(2026, 3, 29, 9, 0)
+    requested_end = datetime(2026, 3, 29, 12, 0)
+
+    lesson_before_range = build_lesson_dao(
+        id=1,
+        start_time=datetime(2026, 3, 29, 8, 0),
+        end_time=datetime(2026, 3, 29, 8, 45),
+    )
+    lesson_in_range = build_lesson_dao(
+        id=2,
+        start_time=datetime(2026, 3, 29, 10, 0),
+        end_time=datetime(2026, 3, 29, 11, 0),
+    )
+    lesson_after_range = build_lesson_dao(
+        id=3,
+        start_time=datetime(2026, 3, 29, 12, 30),
+        end_time=datetime(2026, 3, 29, 13, 30),
+    )
+
+    async def fake_list_lessons(db, **filters):
+        lessons = [lesson_before_range, lesson_in_range, lesson_after_range]
+        return [
+            lesson
+            for lesson in lessons
+            if lesson.start_time >= filters["start_time"]
+            and lesson.end_time <= filters["end_time"]
+        ]
+
+    monkeypatch.setattr(lessons_router_module, "list_lessons", fake_list_lessons)
+
+    user = SimpleNamespace(id="student-1", role=Roles.STUDENT)
+
+    result = await lessons_router_module.get_lessons(
+        user=user,
+        db=object(),
+        start_time=requested_start,
+        end_time=requested_end,
+    )
+
+    assert [lesson.id for lesson in result] == [2]
+    assert result[0].start_time == datetime(2026, 3, 29, 10, 0)
+    assert result[0].end_time == datetime(2026, 3, 29, 11, 0)
+
+
+@pytest.mark.asyncio
 async def test_create_lesson_for_teacher_uses_current_teacher_id(monkeypatch):
     captured = {}
     lesson = build_lesson_dao(teacher_id="teacher-1")

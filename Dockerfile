@@ -22,7 +22,6 @@ RUN uv sync --frozen --no-dev --no-install-project
 
 COPY src ./src
 COPY scripts ./scripts
-COPY __init__.py ./
 
 RUN chmod +x ./scripts/run-backend.sh
 

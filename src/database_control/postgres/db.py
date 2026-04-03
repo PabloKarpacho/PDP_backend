@@ -66,15 +66,21 @@ def get_sessionmaker() -> async_sessionmaker[AsyncSession]:
     return AsyncSessionLocal
 
 
-def run_migrations() -> None:
+def build_alembic_config(database_dsn: str | None = None) -> AlembicConfig:
     project_root = Path(__file__).resolve().parents[3]
     alembic_config = AlembicConfig(str(project_root / "alembic.ini"))
+    resolved_dsn = database_dsn or CONFIG.POSTGRESQL_DSN
     alembic_config.set_main_option(
         "sqlalchemy.url",
-        _build_sync_dsn(CONFIG.POSTGRESQL_DSN),
+        _build_sync_dsn(resolved_dsn),
     )
+    return alembic_config
+
+
+def upgrade_database_head(database_dsn: str | None = None) -> None:
+    alembic_config = build_alembic_config(database_dsn)
     command.upgrade(alembic_config, "head")
 
 
-async def init_models() -> None:
-    await asyncio.to_thread(run_migrations)
+async def upgrade_database_head_async(database_dsn: str | None = None) -> None:
+    await asyncio.to_thread(upgrade_database_head, database_dsn)

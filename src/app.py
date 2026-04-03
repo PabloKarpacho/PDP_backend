@@ -7,18 +7,12 @@ from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
-from sqlalchemy.exc import SQLAlchemyError
-from contextlib import asynccontextmanager
 
-from src.config import CONFIG
 from src.logger import logger
-from src.database_control.postgres import init_models
-from src.database_control.s3 import ensure_bucket_exists
-
-
 from src.routers import homework_router
-from src.routers import user_router
 from src.routers import lesson_router
+from src.routers import user_router
+from src.startup import create_lifespan
 
 
 routers = [user_router, lesson_router, homework_router]
@@ -67,29 +61,11 @@ class CustomMiddleware(BaseHTTPMiddleware):
         return response
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Создаем таблицы при запуске приложения
-    try:
-        await init_models()
-        print("Tables created successfully.")
-    except SQLAlchemyError as e:
-        print(f"Error creating tables: {e}")
-
-    # Создаем бакет с файлами
-    try:
-        await ensure_bucket_exists(CONFIG.MINIO_FILES_BUCKET_NAME)
-    except Exception as e:
-        raise e
-
-    yield  # Proceed to app lifecycle
-
-
 app = FastAPI(
     title="PDP",
     root_path="/pdp",
     description="Сервис для управления рассписанием уроков",
-    lifespan=lifespan,
+    lifespan=create_lifespan(),
 )
 app.add_middleware(CustomMiddleware)
 

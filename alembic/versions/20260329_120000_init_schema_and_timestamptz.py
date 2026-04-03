@@ -33,7 +33,9 @@ def _column_names(inspector: sa.Inspector, table_name: str) -> set[str]:
     return {column["name"] for column in inspector.get_columns(table_name)}
 
 
-def _is_timezone_aware(inspector: sa.Inspector, table_name: str, column_name: str) -> bool:
+def _is_timezone_aware(
+    inspector: sa.Inspector, table_name: str, column_name: str
+) -> bool:
     for column in inspector.get_columns(table_name):
         if column["name"] == column_name:
             return bool(getattr(column["type"], "timezone", False))
@@ -169,4 +171,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    raise NotImplementedError("Downgrade is not supported for the initial baseline migration.")
+    raise NotImplementedError(
+        "Downgrade is not supported for the initial baseline migration."
+    )

@@ -87,7 +87,9 @@ async def test_get_homework_for_teacher_passes_teacher_filter(monkeypatch):
         captured["filters"] = filters
         return homework
 
-    monkeypatch.setattr(homework_router_module, "get_homework_record", fake_get_homework)
+    monkeypatch.setattr(
+        homework_router_module, "get_homework_record", fake_get_homework
+    )
 
     user = SimpleNamespace(id="teacher-1", role=Roles.TEACHER)
     db = object()
@@ -115,7 +117,9 @@ async def test_create_homework_for_teacher_uses_current_teacher_id(monkeypatch):
         captured["payload"] = payload
         return homework
 
-    monkeypatch.setattr(homework_router_module, "create_homework_record", fake_create_homework)
+    monkeypatch.setattr(
+        homework_router_module, "create_homework_record", fake_create_homework
+    )
 
     user = SimpleNamespace(id="teacher-1", role=Roles.TEACHER)
     db = object()
@@ -145,7 +149,9 @@ async def test_update_homework_for_student_passes_only_student_fields(monkeypatc
         captured["payload"] = payload
         return homework
 
-    monkeypatch.setattr(homework_router_module, "update_homework_record", fake_update_homework)
+    monkeypatch.setattr(
+        homework_router_module, "update_homework_record", fake_update_homework
+    )
 
     user = SimpleNamespace(id="student-1", role=Roles.STUDENT)
     db = object()
@@ -183,7 +189,9 @@ async def test_delete_homework_for_teacher_passes_teacher_filter(monkeypatch):
         captured["teacher_id"] = teacher_id
         return homework
 
-    monkeypatch.setattr(homework_router_module, "soft_delete_homework", fake_soft_delete_homework)
+    monkeypatch.setattr(
+        homework_router_module, "soft_delete_homework", fake_soft_delete_homework
+    )
 
     user = SimpleNamespace(id="teacher-1", role=Roles.TEACHER)
     db = object()

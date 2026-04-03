@@ -1,4 +1,3 @@
-import os
 import time
 import traceback
 
@@ -17,13 +16,14 @@ from src.database_control.postgres import init_models
 from src.database_control.s3 import ensure_bucket_exists
 
 
-
 from src.routers import homework_router
 from src.routers import user_router
 from src.routers import lesson_router
 
 
 routers = [user_router, lesson_router, homework_router]
+
+
 class CustomMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         start_time = time.time()
@@ -32,7 +32,9 @@ class CustomMiddleware(BaseHTTPMiddleware):
         except Exception as exc:
             end_time = time.time()
             time_taken = end_time - start_time
-            tb_str = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+            tb_str = "".join(
+                traceback.format_exception(type(exc), exc, exc.__traceback__)
+            )
             logger.error(
                 f"Unhandled exception while processing request: {tb_str}",
                 extra={
@@ -65,7 +67,6 @@ class CustomMiddleware(BaseHTTPMiddleware):
         return response
 
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Создаем таблицы при запуске приложения
@@ -88,7 +89,7 @@ app = FastAPI(
     title="PDP",
     root_path="/pdp",
     description="Сервис для управления рассписанием уроков",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 app.add_middleware(CustomMiddleware)
 
@@ -129,6 +130,7 @@ async def unexpected_exception_handler(request: Request, exc: Exception):
         content={"message": "Internal Server Error"},
     )
 
+
 @app.get("/actuator/health/liveness", status_code=200)
 def liveness_check():
     return "Liveness check succeeded."
@@ -137,4 +139,3 @@ def liveness_check():
 @app.get("/actuator/health/readiness", status_code=200)
 def readiness_check():
     return "Service is ready"
- 

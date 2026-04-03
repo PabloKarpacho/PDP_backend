@@ -99,6 +99,15 @@ docker compose down
 docker compose down -v
 ```
 
+Установка pre-commit хуков:
+
+```bash
+uv run pre-commit install
+uv run pre-commit run --all-files
+```
+
+Хуки используют `ruff check --fix` и `ruff format`
+
 ## Примечание
 
 При старте Keycloak импортирует realm из `realm-export.json`.

@@ -162,7 +162,9 @@ async def update_homework(
     user: UserDAO = Depends(get_user),
     db: AsyncSession = Depends(get_db),
 ) -> HomeworkGetSchema:
-    logger.info(f"Received update request for homework {homework_id} with data: {homework}")
+    logger.info(
+        f"Received update request for homework {homework_id} with data: {homework}"
+    )
 
     homework_filters = _get_homework_filters(user)
 

@@ -138,7 +138,9 @@ async def test_create_lesson_for_teacher_uses_current_teacher_id(monkeypatch):
         captured["payload"] = payload
         return lesson
 
-    monkeypatch.setattr(lessons_router_module, "create_lesson_record", fake_create_lesson)
+    monkeypatch.setattr(
+        lessons_router_module, "create_lesson_record", fake_create_lesson
+    )
 
     user = SimpleNamespace(id="teacher-1", role=Roles.TEACHER)
     db = object()
@@ -168,7 +170,9 @@ async def test_update_lesson_for_teacher_passes_teacher_filter(monkeypatch):
         captured["payload"] = payload
         return lesson
 
-    monkeypatch.setattr(lessons_router_module, "update_lesson_record", fake_update_lesson)
+    monkeypatch.setattr(
+        lessons_router_module, "update_lesson_record", fake_update_lesson
+    )
 
     user = SimpleNamespace(id="teacher-1", role=Roles.TEACHER)
     db = object()
@@ -199,7 +203,9 @@ async def test_delete_lesson_for_teacher_passes_teacher_filter(monkeypatch):
         captured["teacher_id"] = teacher_id
         return lesson
 
-    monkeypatch.setattr(lessons_router_module, "soft_delete_lesson", fake_soft_delete_lesson)
+    monkeypatch.setattr(
+        lessons_router_module, "soft_delete_lesson", fake_soft_delete_lesson
+    )
 
     user = SimpleNamespace(id="teacher-1", role=Roles.TEACHER)
     db = object()

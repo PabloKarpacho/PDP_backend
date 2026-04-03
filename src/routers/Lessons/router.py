@@ -8,7 +8,11 @@ from src.database_control.postgres import get_db
 from src.dependencies import get_user, get_teacher
 from src.logger import logger
 from src.constants import Roles
-from src.routers.Lessons.schemas import LessonGetSchema, LessonCreateSchema, LessonUpdateSchema
+from src.routers.Lessons.schemas import (
+    LessonGetSchema,
+    LessonCreateSchema,
+    LessonUpdateSchema,
+)
 from src.routers.Lessons.crud import (
     list_lessons,
     create_lesson as create_lesson_record,

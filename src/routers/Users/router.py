@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 
 from src.dependencies import get_user
 from src.models import UserDAO
-from src.routers.Users.schemas import UserGetSchema, UserMessageSchema
+from src.routers.Users.schemas import UserGetSchema
 
 
 PREFIX = "/users"

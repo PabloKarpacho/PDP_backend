@@ -44,7 +44,9 @@ def test_normalize_datetime_to_utc_converts_offset_aware_datetime():
 
 @pytest.mark.asyncio
 async def test_create_homework_normalizes_deadline_and_links_lesson():
-    lesson = SimpleNamespace(id=10, teacher_id="teacher-1", is_deleted=False, homework=None)
+    lesson = SimpleNamespace(
+        id=10, teacher_id="teacher-1", is_deleted=False, homework=None
+    )
     session = FakeAsyncSession(execute_result=lesson)
     deadline = datetime(2026, 3, 29, 10, 43, tzinfo=timezone(timedelta(hours=3)))
 

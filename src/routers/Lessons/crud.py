@@ -223,12 +223,18 @@ async def update_lesson(
 
     normalized_update_data = dict(update_data)
 
-    if "start_time" in normalized_update_data and normalized_update_data["start_time"] is not None:
+    if (
+        "start_time" in normalized_update_data
+        and normalized_update_data["start_time"] is not None
+    ):
         normalized_update_data["start_time"] = _normalize_datetime_to_utc(
             normalized_update_data["start_time"]
         )
 
-    if "end_time" in normalized_update_data and normalized_update_data["end_time"] is not None:
+    if (
+        "end_time" in normalized_update_data
+        and normalized_update_data["end_time"] is not None
+    ):
         normalized_update_data["end_time"] = _normalize_datetime_to_utc(
             normalized_update_data["end_time"]
         )

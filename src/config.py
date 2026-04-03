@@ -1,4 +1,3 @@
-import json
 import os
 
 from dotenv import find_dotenv
@@ -22,38 +21,41 @@ class Config:
     GRAYLOG_HOST = os.getenv("GRAYLOG_HOST", "ml-dev1.dohod.local")
     GRAYLOG_PORT = int(os.getenv("GRAYLOG_PORT", 12201))
 
-    #DATABASE
+    # DATABASE
 
-    POSTGRESQL_DSN = os.getenv("POSTGRESQL_DSN", "postgresql+asyncpg://postgres:postgres@localhost:5432/pdp")
+    POSTGRESQL_DSN = os.getenv(
+        "POSTGRESQL_DSN", "postgresql+asyncpg://postgres:postgres@localhost:5432/pdp"
+    )
 
-    #AUTH
+    # AUTH
 
-    SECRET_KEY=os.getenv("SECRET_KEY", "gV64m9aIzFG4qpgVphvQbPQrtAO0nM-7YwwOvu0XPt5KJOjAy4AfgLkqJXYEt")
-    ALGORITHM=os.getenv("ALGORITHM", "HS256")
+    SECRET_KEY = os.getenv(
+        "SECRET_KEY", "gV64m9aIzFG4qpgVphvQbPQrtAO0nM-7YwwOvu0XPt5KJOjAy4AfgLkqJXYEt"
+    )
+    ALGORITHM = os.getenv("ALGORITHM", "HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-    #MAIL
+    # MAIL
 
-    SMTP_SERVER = os.getenv("SMTP_HOST",  "smtp.yandex.ru")
+    SMTP_SERVER = os.getenv("SMTP_HOST", "smtp.yandex.ru")
     SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
     SMTP_USER = os.getenv("SMTP_USER", "karpoffpasha@yandex.ru")
     SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "wjjuemuicfnpwxsj")
-    
-    #USER
 
-    ROLES_HASHMAP = {"teacher" : {"is_teacher" : True},
-                     "student" : {"is_student" : True}}
-    
-    #FILES
+    # USER
 
-    MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT",  "localhost:9000")
-    MINIO_ROOT_USER = os.getenv("MINIO_ROOT_USER",  "ROOTNAME")
-    MINIO_ROOT_PASSWORD = os.getenv("MINIO_ROOT_PASSWORD",  "CHANGEME123")
-    MINIO_FILES_BUCKET_NAME = os.getenv("MINIO_FILES_BUCKET_NAME",  "pdp-files")
-    MINIO_SECURE = os.getenv("MINIO_SECURE",  False)
+    ROLES_HASHMAP = {"teacher": {"is_teacher": True}, "student": {"is_student": True}}
 
-    #KEYCLOACK
-    
+    # FILES
+
+    MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "localhost:9000")
+    MINIO_ROOT_USER = os.getenv("MINIO_ROOT_USER", "ROOTNAME")
+    MINIO_ROOT_PASSWORD = os.getenv("MINIO_ROOT_PASSWORD", "CHANGEME123")
+    MINIO_FILES_BUCKET_NAME = os.getenv("MINIO_FILES_BUCKET_NAME", "pdp-files")
+    MINIO_SECURE = os.getenv("MINIO_SECURE", False)
+
+    # KEYCLOACK
+
     KEYCLOACK_HOST_URL = os.getenv("KEYCLOACK_HOST_URL", "http://localhost:8080")
     KEYCLOACK_PUBLIC_URL = os.getenv("KEYCLOACK_PUBLIC_URL", "http://localhost:8080")
     KEYCLOACK_REALM = os.getenv("KEYCLOACK_REALM", "pdp")

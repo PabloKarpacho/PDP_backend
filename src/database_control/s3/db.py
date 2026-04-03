@@ -8,7 +8,6 @@ from src.config import CONFIG
 
 
 class S3:
-
     def __init__(
         self,
         s3_access_key_id: str,

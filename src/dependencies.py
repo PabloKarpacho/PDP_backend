@@ -44,8 +44,7 @@ async def get_teacher(
         Application user entity from the local database.
     """
     if not (
-        keycloak_user.role == Roles.TEACHER
-        or keycloak_user.has_role(Roles.TEACHER)
+        keycloak_user.role == Roles.TEACHER or keycloak_user.has_role(Roles.TEACHER)
     ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

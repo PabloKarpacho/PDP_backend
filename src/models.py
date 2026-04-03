@@ -6,18 +6,11 @@ from sqlalchemy import (
     Column,
     Integer,
     String,
-    DateTime,
-    Enum,
     ForeignKey,
-    Text,
-    Table,
-    UniqueConstraint,
     DateTime,
     Boolean,
-    text,
     func,
     JSON,
-    TIMESTAMP,
 )
 from sqlalchemy.orm import relationship, Mapped
 from sqlalchemy.orm import declarative_base
@@ -28,7 +21,9 @@ Base = declarative_base()
 class UserDAO(Base):
     __tablename__ = "users"
 
-    id: Mapped[str] = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    id: Mapped[str] = Column(
+        String, primary_key=True, default=lambda: str(uuid.uuid4())
+    )
     name: Mapped[str] = Column(String, nullable=False)
     surname: Mapped[str] = Column(String, nullable=True)
     email: Mapped[str] = Column(String, unique=True, nullable=False)
@@ -62,7 +57,7 @@ class LessonDAO(Base):
 
     status: Mapped[str] = Column(String, nullable=False, default="active")
 
-    homework_id : Mapped[int] = Column(
+    homework_id: Mapped[int] = Column(
         Integer, ForeignKey("homeworks.id", ondelete="CASCADE"), nullable=True
     )
 

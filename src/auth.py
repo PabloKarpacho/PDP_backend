@@ -54,7 +54,6 @@ async def get_payload(token: str = Depends(oauth2_scheme)) -> dict:
 
 
 async def get_user_info(payload: dict = Depends(get_payload)) -> KeycloakUser:
-
     try:
         logger.info(f"Payload: {payload}")
         realm_roles = payload.get("realm_access", {}).get("roles", [])

@@ -3,14 +3,16 @@ from datetime import datetime
 import uuid
 
 from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    ForeignKey,
-    DateTime,
     Boolean,
-    func,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
     JSON,
+    String,
+    UniqueConstraint,
+    func,
 )
 from sqlalchemy.orm import relationship, Mapped
 from sqlalchemy.orm import declarative_base
@@ -37,14 +39,36 @@ class UserDAO(Base):
 
 class TeachersStudentsDAO(Base):
     __tablename__ = "teachers_students"
+    __table_args__ = (
+        UniqueConstraint(
+            "teacher_id",
+            "student_id",
+            name="uq_teachers_students_teacher_student",
+        ),
+        Index("ix_teachers_students_teacher_id", "teacher_id"),
+        Index("ix_teachers_students_student_id", "student_id"),
+    )
 
     id: Mapped[int] = Column(Integer, primary_key=True, autoincrement=True)
-    teacher_id: Mapped[int] = Column(Integer, nullable=False)
-    student_id: Mapped[int] = Column(Integer, nullable=False)
+    teacher_id: Mapped[str] = Column(
+        String,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    student_id: Mapped[str] = Column(
+        String,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
 
 
 class LessonDAO(Base):
     __tablename__ = "lessons"
+    __table_args__ = (
+        UniqueConstraint("homework_id", name="uq_lessons_homework_id"),
+        Index("ix_lessons_teacher_id_start_time", "teacher_id", "start_time"),
+        Index("ix_lessons_student_id_start_time", "student_id", "start_time"),
+    )
 
     id: Mapped[int] = Column(Integer, primary_key=True, autoincrement=True)
     start_time: Mapped[datetime] = Column(DateTime(timezone=True), nullable=False)
@@ -52,13 +76,23 @@ class LessonDAO(Base):
     theme: Mapped[str] = Column(String, nullable=True)
     lesson_description: Mapped[str] = Column(String, nullable=True)
 
-    teacher_id: Mapped[str] = Column(String, nullable=False)
-    student_id: Mapped[str] = Column(String, nullable=False)
+    teacher_id: Mapped[str] = Column(
+        String,
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    student_id: Mapped[str] = Column(
+        String,
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
 
     status: Mapped[str] = Column(String, nullable=False, default="active")
 
     homework_id: Mapped[int] = Column(
-        Integer, ForeignKey("homeworks.id", ondelete="CASCADE"), nullable=True
+        Integer,
+        ForeignKey("homeworks.id", ondelete="SET NULL"),
+        nullable=True,
     )
 
     is_deleted: Mapped[bool] = Column(Boolean, default=False)
@@ -68,7 +102,12 @@ class LessonDAO(Base):
     )
     created_at: Mapped[datetime] = Column(DateTime(timezone=True), default=func.now())
 
-    homework = relationship("HomeworkDAO", back_populates="lesson", uselist=False)
+    homework = relationship(
+        "HomeworkDAO",
+        back_populates="lesson",
+        foreign_keys=[homework_id],
+        uselist=False,
+    )
 
 
 class HomeworkDAO(Base):
@@ -89,4 +128,9 @@ class HomeworkDAO(Base):
     )
     created_at: Mapped[datetime] = Column(DateTime(timezone=True), default=func.now())
 
-    lesson = relationship("LessonDAO", back_populates="homework", uselist=False)
+    lesson = relationship(
+        "LessonDAO",
+        back_populates="homework",
+        foreign_keys="LessonDAO.homework_id",
+        uselist=False,
+    )

@@ -58,6 +58,22 @@ def test_alembic_upgrade_head_on_empty_database() -> None:
         try:
             inspector = inspect(engine)
             table_names = set(inspector.get_table_names())
+            teachers_students_columns = {
+                column["name"]: column["type"].python_type
+                for column in inspector.get_columns("teachers_students")
+            }
+            lesson_foreign_keys = inspector.get_foreign_keys("lessons")
+            teachers_students_foreign_keys = inspector.get_foreign_keys(
+                "teachers_students"
+            )
+            lesson_indexes = {
+                tuple(index["column_names"])
+                for index in inspector.get_indexes("lessons")
+            }
+            lesson_unique_constraints = {
+                tuple(constraint["column_names"])
+                for constraint in inspector.get_unique_constraints("lessons")
+            }
         finally:
             engine.dispose()
 
@@ -68,6 +84,31 @@ def test_alembic_upgrade_head_on_empty_database() -> None:
             "homeworks",
             "lessons",
         } <= table_names
+        assert teachers_students_columns["teacher_id"] is str
+        assert teachers_students_columns["student_id"] is str
+        assert any(
+            foreign_key["referred_table"] == "users"
+            and foreign_key["constrained_columns"] == ["teacher_id"]
+            for foreign_key in teachers_students_foreign_keys
+        )
+        assert any(
+            foreign_key["referred_table"] == "users"
+            and foreign_key["constrained_columns"] == ["student_id"]
+            for foreign_key in teachers_students_foreign_keys
+        )
+        assert any(
+            foreign_key["referred_table"] == "users"
+            and foreign_key["constrained_columns"] == ["teacher_id"]
+            for foreign_key in lesson_foreign_keys
+        )
+        assert any(
+            foreign_key["referred_table"] == "users"
+            and foreign_key["constrained_columns"] == ["student_id"]
+            for foreign_key in lesson_foreign_keys
+        )
+        assert ("teacher_id", "start_time") in lesson_indexes
+        assert ("student_id", "start_time") in lesson_indexes
+        assert ("homework_id",) in lesson_unique_constraints
     finally:
         with admin_connection.cursor() as cursor:
             cursor.execute(

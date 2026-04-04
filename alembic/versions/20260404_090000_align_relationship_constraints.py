@@ -5,6 +5,8 @@ Revises: 20260329_120000
 Create Date: 2026-04-04 09:00:00
 """
 
+import hashlib
+
 from alembic import op
 import sqlalchemy as sa
 
@@ -114,6 +116,137 @@ def _validate_no_orphan_user_refs(table_name: str, column_name: str) -> None:
         )
 
 
+def _legacy_user_email(user_id: str) -> str:
+    digest = hashlib.sha256(user_id.encode("utf-8")).hexdigest()[:24]
+    return f"legacy-{digest}@invalid.local"
+
+
+def _legacy_user_name(user_id: str) -> str:
+    cleaned = user_id.strip()
+    if cleaned:
+        return cleaned[:255]
+    return "legacy-user"
+
+
+def _get_orphan_user_refs(table_name: str, column_name: str) -> list[str]:
+    bind = op.get_bind()
+    return (
+        bind.execute(
+            sa.text(
+                f"""
+                SELECT DISTINCT CAST("{column_name}" AS TEXT)
+                FROM "{table_name}"
+                WHERE "{column_name}" IS NOT NULL
+                  AND CAST("{column_name}" AS TEXT) NOT IN (SELECT id FROM users)
+                """
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+def _insert_legacy_users(user_ids: list[str]) -> None:
+    if not user_ids:
+        return
+
+    users_table = sa.table(
+        "users",
+        sa.column("id", sa.String()),
+        sa.column("name", sa.String()),
+        sa.column("surname", sa.String()),
+        sa.column("email", sa.String()),
+        sa.column("role", sa.String()),
+    )
+    op.bulk_insert(
+        users_table,
+        [
+            {
+                "id": user_id,
+                "name": _legacy_user_name(user_id),
+                "surname": "migrated",
+                "email": _legacy_user_email(user_id),
+                "role": "legacy",
+            }
+            for user_id in user_ids
+        ],
+    )
+
+
+def _ensure_legacy_users_for_orphan_refs(table_name: str, column_name: str) -> None:
+    orphan_ids = _get_orphan_user_refs(table_name, column_name)
+    _insert_legacy_users(orphan_ids)
+
+
+def _deduplicate_teachers_students_pairs() -> None:
+    bind = op.get_bind()
+    duplicate_ids = (
+        bind.execute(
+            sa.text(
+                """
+                WITH ranked_pairs AS (
+                    SELECT
+                        id,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY teacher_id, student_id
+                            ORDER BY id
+                        ) AS row_number
+                    FROM teachers_students
+                )
+                SELECT id
+                FROM ranked_pairs
+                WHERE row_number > 1
+                """
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    if duplicate_ids:
+        bind.execute(
+            sa.text(
+                "DELETE FROM teachers_students WHERE id = ANY(:duplicate_ids)"
+            ).bindparams(sa.bindparam("duplicate_ids", expanding=True)),
+            {"duplicate_ids": duplicate_ids},
+        )
+
+
+def _deduplicate_homework_links() -> None:
+    bind = op.get_bind()
+    duplicate_ids = (
+        bind.execute(
+            sa.text(
+                """
+                WITH ranked_lessons AS (
+                    SELECT
+                        id,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY homework_id
+                            ORDER BY id
+                        ) AS row_number
+                    FROM lessons
+                    WHERE homework_id IS NOT NULL
+                )
+                SELECT id
+                FROM ranked_lessons
+                WHERE row_number > 1
+                """
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    if duplicate_ids:
+        bind.execute(
+            sa.text(
+                "UPDATE lessons SET homework_id = NULL WHERE id = ANY(:duplicate_ids)"
+            ).bindparams(sa.bindparam("duplicate_ids", expanding=True)),
+            {"duplicate_ids": duplicate_ids},
+        )
+
+
 def _validate_no_duplicate_pairs() -> None:
     bind = op.get_bind()
     duplicates = bind.execute(
@@ -194,8 +327,11 @@ def _ensure_teachers_students_schema() -> None:
     if not _table_exists(inspector, "teachers_students"):
         return
 
+    _ensure_legacy_users_for_orphan_refs("teachers_students", "teacher_id")
+    _ensure_legacy_users_for_orphan_refs("teachers_students", "student_id")
     _validate_no_orphan_user_refs("teachers_students", "teacher_id")
     _validate_no_orphan_user_refs("teachers_students", "student_id")
+    _deduplicate_teachers_students_pairs()
     _validate_no_duplicate_pairs()
 
     _alter_column_to_string(inspector, "teachers_students", "teacher_id")
@@ -268,8 +404,11 @@ def _ensure_lessons_schema() -> None:
     if not _table_exists(inspector, "lessons"):
         return
 
+    _ensure_legacy_users_for_orphan_refs("lessons", "teacher_id")
+    _ensure_legacy_users_for_orphan_refs("lessons", "student_id")
     _validate_no_orphan_user_refs("lessons", "teacher_id")
     _validate_no_orphan_user_refs("lessons", "student_id")
+    _deduplicate_homework_links()
     _validate_no_duplicate_homework_links()
 
     if not _is_string_column(inspector, "lessons", "teacher_id"):

@@ -59,11 +59,11 @@ async def get_user_info(payload: dict = Depends(get_payload)) -> KeycloakUser:
         realm_roles = payload.get("realm_access", {}).get("roles", [])
         return KeycloakUser(
             id=payload.get("sub"),
-            username=payload.get("name"),
+            username=payload.get("preferred_username") or payload.get("name"),
             email=payload.get("email"),
             first_name=payload.get("given_name"),
+            last_name=payload.get("family_name") or payload.get("last_name"),
             phone=payload.get("phone"),
-            role=payload.get("role"),
             realm_roles=realm_roles,
         )
     except Exception as e:

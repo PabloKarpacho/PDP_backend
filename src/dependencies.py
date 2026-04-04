@@ -10,6 +10,16 @@ from src.schemas import KeycloakUser
 from src.services.users import get_or_create_user_from_keycloak
 
 
+def _require_keycloak_role(keycloak_user: KeycloakUser, required_role: str) -> None:
+    if keycloak_user.has_role(required_role):
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Forbidden",
+    )
+
+
 async def get_user(
     keycloak_user: KeycloakUser = Depends(get_user_info),
     db: AsyncSession = Depends(get_db),
@@ -43,12 +53,13 @@ async def get_teacher(
     Returns:
         Application user entity from the local database.
     """
-    if not (
-        keycloak_user.role == Roles.TEACHER or keycloak_user.has_role(Roles.TEACHER)
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Forbidden",
-        )
+    _require_keycloak_role(keycloak_user, Roles.TEACHER)
+    return await get_or_create_user_from_keycloak(keycloak_user=keycloak_user, db=db)
 
+
+async def get_student(
+    keycloak_user: KeycloakUser = Depends(get_user_info),
+    db: AsyncSession = Depends(get_db),
+) -> UserDAO:
+    _require_keycloak_role(keycloak_user, Roles.STUDENT)
     return await get_or_create_user_from_keycloak(keycloak_user=keycloak_user, db=db)

@@ -4,6 +4,7 @@ from src.logger import logger
 from src.models import UserDAO
 from src.routers.Users.crud import create_user as create_user_record
 from src.routers.Users.crud import get_user as get_user_record
+from src.routers.Users.crud import update_user as update_user_record
 from src.routers.Users.utils import serialize_user
 from src.routers.Users.schemas import UserGetSchema
 from src.schemas import KeycloakUser
@@ -24,6 +25,20 @@ async def get_or_create_user_from_keycloak(
     user = await get_user_record(db, user_id=keycloak_user.id)
 
     if user is not None:
+        if (
+            user.name != keycloak_user.username
+            or user.surname != keycloak_user.last_name
+            or user.email != keycloak_user.email
+            or user.role != keycloak_user.role
+        ):
+            return await update_user_record(
+                db,
+                user=user,
+                name=keycloak_user.username,
+                surname=keycloak_user.last_name,
+                email=keycloak_user.email,
+                role=keycloak_user.role,
+            )
         return user
 
     user = await create_user_record(

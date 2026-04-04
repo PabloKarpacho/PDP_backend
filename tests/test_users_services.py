@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from src.constants import Roles
 from src.schemas import KeycloakUser
 from src.services import users as users_service
 
@@ -29,11 +30,11 @@ def build_user_dao(**overrides):
 def build_keycloak_user(**overrides):
     payload = {
         "id": "user-1",
-        "username": "john",
+        "username": "John",
         "email": "john@example.com",
         "last_name": "Doe",
         "role": "Teacher",
-        "realm_roles": [],
+        "realm_roles": ["teacher"],
     }
     payload.update(overrides)
     return KeycloakUser(**payload)
@@ -67,6 +68,32 @@ async def test_get_or_create_user_from_keycloak_returns_existing_user(monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_get_or_create_user_from_keycloak_syncs_existing_user_role(monkeypatch):
+    user = build_user_dao(role=Roles.STUDENT)
+    captured = {}
+
+    async def fake_get_user(db, *, user_id):
+        return user
+
+    async def fake_update_user(db, *, user, **payload):
+        captured["user"] = user
+        captured["payload"] = payload
+        return user
+
+    monkeypatch.setattr(users_service, "get_user_record", fake_get_user)
+    monkeypatch.setattr(users_service, "update_user_record", fake_update_user)
+
+    result = await users_service.get_or_create_user_from_keycloak(
+        db=FakeAsyncSession(),
+        keycloak_user=build_keycloak_user(realm_roles=["teacher"], role="student"),
+    )
+
+    assert result is user
+    assert captured["user"] is user
+    assert captured["payload"]["role"] == Roles.TEACHER
+
+
+@pytest.mark.asyncio
 async def test_get_or_create_user_from_keycloak_creates_missing_user(monkeypatch):
     created_user = build_user_dao(id="user-2", email="new@example.com")
 
@@ -79,7 +106,7 @@ async def test_get_or_create_user_from_keycloak_creates_missing_user(monkeypatch
             "name": "new-user",
             "surname": "User",
             "email": "new@example.com",
-            "role": "student",
+            "role": Roles.STUDENT,
         }
         return created_user
 
@@ -93,7 +120,8 @@ async def test_get_or_create_user_from_keycloak_creates_missing_user(monkeypatch
             username="new-user",
             email="new@example.com",
             last_name="User",
-            role="student",
+            role="teacher",
+            realm_roles=["student"],
         ),
     )
 

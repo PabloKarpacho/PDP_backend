@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.constants import Roles
+from src.constants import Roles, role_matches
 from src.models import UserDAO
 from src.routers.Homework.crud import create_homework as create_homework_record
 from src.routers.Homework.crud import get_homework as get_homework_record
@@ -24,10 +24,10 @@ from src.services.exceptions import (
 
 
 def _get_homework_filters(user: UserDAO) -> dict[str, str] | None:
-    if user.role == Roles.STUDENT:
+    if role_matches(user.role, Roles.STUDENT):
         return {"student_id": user.id}
 
-    if user.role == Roles.TEACHER:
+    if role_matches(user.role, Roles.TEACHER):
         return {"teacher_id": user.id}
 
     return None
@@ -36,7 +36,7 @@ def _get_homework_filters(user: UserDAO) -> dict[str, str] | None:
 def _get_homework_update_data(homework: HomeworkUpdateSchema, user: UserDAO) -> dict:
     payload = homework.model_dump(exclude_unset=True)
 
-    if user.role == Roles.STUDENT:
+    if role_matches(user.role, Roles.STUDENT):
         return {key: payload[key] for key in ("answer", "sent_files") if key in payload}
 
     payload.pop("lesson_id", None)

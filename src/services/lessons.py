@@ -2,7 +2,7 @@ import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.constants import Roles
+from src.constants import Roles, role_matches
 from src.models import UserDAO
 from src.routers.Lessons.crud import create_lesson as create_lesson_record
 from src.routers.Lessons.crud import list_lessons as list_lessons_records
@@ -18,10 +18,10 @@ from src.services.exceptions import NotFoundError
 
 
 def _get_lesson_filters(user: UserDAO) -> dict[str, str] | None:
-    if user.role == Roles.STUDENT:
+    if role_matches(user.role, Roles.STUDENT):
         return {"student_id": user.id}
 
-    if user.role == Roles.TEACHER:
+    if role_matches(user.role, Roles.TEACHER):
         return {"teacher_id": user.id}
 
     return None

@@ -35,3 +35,21 @@ async def create_user(
     await db.commit()
     await db.refresh(user)
     return user
+
+
+async def update_user(
+    db: AsyncSession,
+    *,
+    user: UserDAO,
+    name: str | None,
+    surname: str | None,
+    email: str,
+    role: str | None,
+) -> UserDAO:
+    user.name = name
+    user.surname = surname
+    user.email = email
+    user.role = role
+    await db.commit()
+    await db.refresh(user)
+    return user

@@ -1,6 +1,12 @@
 from typing import Any, Generic, TypeVar
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+from src.constants import (
+    normalize_realm_roles,
+    resolve_authoritative_role,
+    role_matches,
+)
 
 
 ResponseDataT = TypeVar("ResponseDataT")
@@ -14,10 +20,21 @@ class KeycloakUser(BaseModel):
     last_name: str | None = None
     phone: str | None = None
     role: str | None = None
-    realm_roles: list
+    realm_roles: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_role_authority(cls, value):
+        if not isinstance(value, dict):
+            return value
+
+        payload = dict(value)
+        payload["realm_roles"] = normalize_realm_roles(payload.get("realm_roles"))
+        payload["role"] = resolve_authoritative_role(payload["realm_roles"])
+        return payload
 
     def has_role(self, role_name: str) -> bool:
-        return role_name in self.realm_roles
+        return any(role_matches(role, role_name) for role in self.realm_roles)
 
 
 class authConfiguration(BaseModel):

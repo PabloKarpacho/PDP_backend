@@ -39,7 +39,10 @@ async def test_upload_file_uses_async_s3_client(monkeypatch):
 
     result = await files_router_module.upload_file(upload)
 
-    assert result == {"url": "https://example.com/file"}
+    assert result.success is True
+    assert result.error is None
+    assert result.meta.pagination is None
+    assert result.data.url == "https://example.com/file"
     assert len(fake_client.calls) == 1
     assert fake_client.calls[0]["key"] == "lesson.txt"
     assert fake_client.calls[0]["bucket_name"] == CONFIG.MINIO_FILES_BUCKET_NAME

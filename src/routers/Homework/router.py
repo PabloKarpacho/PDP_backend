@@ -1,4 +1,3 @@
-from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +10,7 @@ from src.routers.Homework.schemas import (
     HomeworkGetSchema,
     HomeworkUpdateSchema,
 )
+from src.schemas import ResponseEnvelope, success_response
 from src.services.exceptions import (
     ConflictError,
     ForbiddenError,
@@ -31,49 +31,52 @@ PREFIX = "/homeworks"
 router = APIRouter(prefix=PREFIX, tags=["Homeworks"])
 
 
-@router.get("")
+@router.get("", response_model=ResponseEnvelope[list[HomeworkGetSchema]])
 async def get_homeworks(
     user: UserDAO = Depends(get_user),
     db: AsyncSession = Depends(get_db),
     lesson_id: int | None = None,
-) -> List[HomeworkGetSchema]:
-    return await list_homeworks_for_user(
+) -> ResponseEnvelope[list[HomeworkGetSchema]]:
+    homeworks = await list_homeworks_for_user(
         db=db,
         user=user,
         lesson_id=lesson_id,
     )
+    return success_response(homeworks)
 
 
-@router.get("/{homework_id}")
+@router.get("/{homework_id}", response_model=ResponseEnvelope[HomeworkGetSchema])
 async def get_homework(
     homework_id: int,
     user: UserDAO = Depends(get_user),
     db: AsyncSession = Depends(get_db),
-) -> HomeworkGetSchema:
+) -> ResponseEnvelope[HomeworkGetSchema]:
     try:
-        return await get_homework_for_user(
+        homework_data = await get_homework_for_user(
             db=db,
             homework_id=homework_id,
             user=user,
         )
+        return success_response(homework_data)
     except ForbiddenError:
         raise HTTPException(403, "Forbidden")
     except NotFoundError:
         raise HTTPException(404, "Homework not found")
 
 
-@router.post("/create")
+@router.post("/create", response_model=ResponseEnvelope[HomeworkGetSchema])
 async def create_homework(
     homework: HomeworkCreateSchema,
     user: UserDAO = Depends(get_teacher),
     db: AsyncSession = Depends(get_db),
-) -> HomeworkGetSchema:
+) -> ResponseEnvelope[HomeworkGetSchema]:
     try:
-        return await create_homework_for_teacher(
+        homework_data = await create_homework_for_teacher(
             db=db,
             user=user,
             homework=homework,
         )
+        return success_response(homework_data)
     except ValidationError as error:
         raise HTTPException(400, str(error)) from error
     except ConflictError as error:
@@ -82,40 +85,42 @@ async def create_homework(
         raise HTTPException(404, "Lesson not found") from error
 
 
-@router.put("/update/{homework_id}")
+@router.put("/update/{homework_id}", response_model=ResponseEnvelope[HomeworkGetSchema])
 async def update_homework(
     homework: HomeworkUpdateSchema,
     homework_id: int,
     user: UserDAO = Depends(get_user),
     db: AsyncSession = Depends(get_db),
-) -> HomeworkGetSchema:
+) -> ResponseEnvelope[HomeworkGetSchema]:
     logger.info(
         f"Received update request for homework {homework_id} with data: {homework}"
     )
     try:
-        return await update_homework_for_user(
+        homework_data = await update_homework_for_user(
             db=db,
             homework_id=homework_id,
             user=user,
             homework=homework,
         )
+        return success_response(homework_data)
     except ForbiddenError as error:
         raise HTTPException(403, "Forbidden") from error
     except NotFoundError as error:
         raise HTTPException(404, "Homework not found") from error
 
 
-@router.delete("/delete/{homework_id}")
+@router.delete("/delete/{homework_id}", response_model=ResponseEnvelope[int])
 async def delete_homework(
     homework_id: int,
     user: UserDAO = Depends(get_teacher),
     db: AsyncSession = Depends(get_db),
-) -> int:
+) -> ResponseEnvelope[int]:
     try:
-        return await delete_homework_for_teacher(
+        homework_id_result = await delete_homework_for_teacher(
             db=db,
             homework_id=homework_id,
             user=user,
         )
+        return success_response(homework_id_result)
     except NotFoundError as error:
         raise HTTPException(404, "Homework not found") from error

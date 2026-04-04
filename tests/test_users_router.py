@@ -41,6 +41,9 @@ async def test_get_current_user_uses_user_service(monkeypatch):
     result = await users_router_module.get_current_user(user=user)
 
     assert captured["user"] is user
-    assert result.id == "user-1"
-    assert result.email == "john@example.com"
-    assert result.role == "Teacher"
+    assert result.success is True
+    assert result.error is None
+    assert result.meta.pagination is None
+    assert result.data.id == "user-1"
+    assert result.data.email == "john@example.com"
+    assert result.data.role == "Teacher"

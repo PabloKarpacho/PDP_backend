@@ -81,8 +81,11 @@ async def test_get_lessons_for_student_passes_student_filter(monkeypatch):
         end_time=end_time,
     )
 
-    assert len(result) == 1
-    assert result[0].student_id == "student-1"
+    assert result.success is True
+    assert result.error is None
+    assert result.meta.pagination is None
+    assert len(result.data) == 1
+    assert result.data[0].student_id == "student-1"
     assert captured["db"] is db
     assert captured["user"] is user
     assert captured["start_time"] == start_time
@@ -119,9 +122,10 @@ async def test_get_lessons_returns_only_lessons_in_requested_time_range(monkeypa
         end_time=requested_end,
     )
 
-    assert [lesson.id for lesson in result] == [2]
-    assert result[0].start_time == datetime(2026, 3, 29, 10, 0)
-    assert result[0].end_time == datetime(2026, 3, 29, 11, 0)
+    assert result.success is True
+    assert [lesson.id for lesson in result.data] == [2]
+    assert result.data[0].start_time == datetime(2026, 3, 29, 10, 0)
+    assert result.data[0].end_time == datetime(2026, 3, 29, 11, 0)
 
 
 @pytest.mark.asyncio
@@ -151,7 +155,9 @@ async def test_create_lesson_for_teacher_uses_current_teacher_id(monkeypatch):
         db=db,
     )
 
-    assert result.teacher_id == "teacher-1"
+    assert result.success is True
+    assert result.error is None
+    assert result.data.teacher_id == "teacher-1"
     assert captured["db"] is db
     assert captured["user"] is user
     assert captured["lesson"] is lesson_payload
@@ -186,7 +192,9 @@ async def test_update_lesson_for_teacher_passes_request_to_service(monkeypatch):
         db=db,
     )
 
-    assert result.id == 1
+    assert result.success is True
+    assert result.error is None
+    assert result.data.id == 1
     assert captured["db"] is db
     assert captured["lesson_id"] == 42
     assert captured["user"] is user
@@ -240,7 +248,9 @@ async def test_delete_lesson_for_teacher_passes_request_to_service(monkeypatch):
         db=db,
     )
 
-    assert result == 7
+    assert result.success is True
+    assert result.error is None
+    assert result.data == 7
     assert captured["db"] is db
     assert captured["lesson_id"] == 7
     assert captured["user"] is user

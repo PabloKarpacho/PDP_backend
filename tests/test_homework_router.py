@@ -79,8 +79,11 @@ async def test_get_homeworks_for_student_passes_student_filter(monkeypatch):
         lesson_id=5,
     )
 
-    assert len(result) == 1
-    assert result[0].lesson_id == 5
+    assert result.success is True
+    assert result.error is None
+    assert result.meta.pagination is None
+    assert len(result.data) == 1
+    assert result.data[0].lesson_id == 5
     assert captured["db"] is db
     assert captured["user"] is user
     assert captured["lesson_id"] == 5
@@ -112,7 +115,9 @@ async def test_get_homework_for_teacher_uses_service(monkeypatch):
         db=db,
     )
 
-    assert result.id == 1
+    assert result.success is True
+    assert result.error is None
+    assert result.data.id == 1
     assert captured["db"] is db
     assert captured["homework_id"] == 7
     assert captured["user"] is user
@@ -165,7 +170,9 @@ async def test_create_homework_for_teacher_uses_current_teacher_id(monkeypatch):
         db=db,
     )
 
-    assert result.lesson_id == 5
+    assert result.success is True
+    assert result.error is None
+    assert result.data.lesson_id == 5
     assert captured["db"] is db
     assert captured["user"] is user
     assert captured["homework"] is homework_payload
@@ -248,7 +255,9 @@ async def test_update_homework_for_student_uses_service(monkeypatch):
         db=db,
     )
 
-    assert result.answer == "done"
+    assert result.success is True
+    assert result.error is None
+    assert result.data.answer == "done"
     assert captured["db"] is db
     assert captured["homework_id"] == 9
     assert captured["user"] is user
@@ -302,7 +311,9 @@ async def test_delete_homework_for_teacher_uses_service(monkeypatch):
         db=db,
     )
 
-    assert result == 7
+    assert result.success is True
+    assert result.error is None
+    assert result.data == 7
     assert captured["db"] is db
     assert captured["homework_id"] == 7
     assert captured["user"] is user

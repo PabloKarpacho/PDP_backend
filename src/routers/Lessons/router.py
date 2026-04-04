@@ -12,16 +12,12 @@ from src.routers.Lessons.schemas import (
     LessonCreateSchema,
     LessonUpdateSchema,
 )
-from src.routers.Lessons.crud import (
-    list_lessons,
-    create_lesson as create_lesson_record,
-    update_lesson as update_lesson_record,
-    soft_delete_lesson,
-)
-from src.routers.Lessons.utils import (
-    get_lesson_filters,
-    get_lesson_update_data,
-    serialize_lesson,
+from src.services.exceptions import NotFoundError
+from src.services.lessons import (
+    create_lesson_for_teacher,
+    delete_lesson_for_teacher,
+    list_lessons_for_user,
+    update_lesson_for_teacher,
 )
 
 
@@ -37,18 +33,12 @@ async def get_lessons(
     start_time: datetime.datetime | None = None,
     end_time: datetime.datetime | None = None,
 ) -> List[LessonGetSchema | None]:
-    lesson_filters = get_lesson_filters(user)
-
-    if lesson_filters is None:
-        return []
-
-    lessons = await list_lessons(
-        db,
+    return await list_lessons_for_user(
+        db=db,
+        user=user,
         start_time=start_time,
         end_time=end_time,
-        **lesson_filters,
     )
-    return [serialize_lesson(lesson) for lesson in lessons]
 
 
 @router.post("/create")
@@ -57,17 +47,7 @@ async def create_lesson(
     user: UserDAO = Depends(get_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> LessonGetSchema:
-    lesson_dao = await create_lesson_record(
-        db,
-        start_time=lesson.start_time,
-        end_time=lesson.end_time,
-        theme=lesson.theme,
-        lesson_description=lesson.lesson_description,
-        teacher_id=user.id,
-        student_id=lesson.student_id,
-        status=lesson.status,
-    )
-    return serialize_lesson(lesson_dao)
+    return await create_lesson_for_teacher(db=db, user=user, lesson=lesson)
 
 
 @router.put("/update/{lesson_id}")
@@ -78,17 +58,15 @@ async def update_lesson(
     db: AsyncSession = Depends(get_db),
 ) -> LessonGetSchema:
     logger.info(f"Received update request for lesson {lesson_id} with data: {lesson}")
-    lesson_dao = await update_lesson_record(
-        db,
-        lesson_id=lesson_id,
-        teacher_id=user.id,
-        **get_lesson_update_data(lesson),
-    )
-
-    if not lesson_dao:
+    try:
+        return await update_lesson_for_teacher(
+            db=db,
+            lesson_id=lesson_id,
+            user=user,
+            lesson=lesson,
+        )
+    except NotFoundError:
         raise HTTPException(404, "Lesson not found")
-
-    return serialize_lesson(lesson_dao)
 
 
 @router.delete("/delete/{lesson_id}")
@@ -97,13 +75,11 @@ async def delete_lesson(
     user: UserDAO = Depends(get_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> int:
-    lesson_dao = await soft_delete_lesson(
-        db,
-        lesson_id=lesson_id,
-        teacher_id=user.id,
-    )
-
-    if not lesson_dao:
+    try:
+        return await delete_lesson_for_teacher(
+            db=db,
+            lesson_id=lesson_id,
+            user=user,
+        )
+    except NotFoundError:
         raise HTTPException(404, "Lesson not found")
-
-    return lesson_dao.id

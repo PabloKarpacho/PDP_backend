@@ -11,17 +11,18 @@ from src.routers.Homework.schemas import (
     HomeworkGetSchema,
     HomeworkUpdateSchema,
 )
-from src.routers.Homework.crud import (
-    create_homework as create_homework_record,
-    get_homework as get_homework_record,
-    list_homeworks,
-    soft_delete_homework,
-    update_homework as update_homework_record,
+from src.services.exceptions import (
+    ConflictError,
+    ForbiddenError,
+    NotFoundError,
+    ValidationError,
 )
-from src.routers.Homework.utils import (
-    get_homework_filters,
-    get_homework_update_data,
-    serialize_homework,
+from src.services.homework import (
+    create_homework_for_teacher,
+    delete_homework_for_teacher,
+    get_homework_for_user,
+    list_homeworks_for_user,
+    update_homework_for_user,
 )
 
 
@@ -36,17 +37,11 @@ async def get_homeworks(
     db: AsyncSession = Depends(get_db),
     lesson_id: int | None = None,
 ) -> List[HomeworkGetSchema]:
-    homework_filters = get_homework_filters(user)
-
-    if homework_filters is None:
-        return []
-
-    homeworks = await list_homeworks(
-        db,
+    return await list_homeworks_for_user(
+        db=db,
+        user=user,
         lesson_id=lesson_id,
-        **homework_filters,
     )
-    return [serialize_homework(homework) for homework in homeworks]
 
 
 @router.get("/{homework_id}")
@@ -55,22 +50,16 @@ async def get_homework(
     user: UserDAO = Depends(get_user),
     db: AsyncSession = Depends(get_db),
 ) -> HomeworkGetSchema:
-    homework_filters = get_homework_filters(user)
-
-    if homework_filters is None:
+    try:
+        return await get_homework_for_user(
+            db=db,
+            homework_id=homework_id,
+            user=user,
+        )
+    except ForbiddenError:
         raise HTTPException(403, "Forbidden")
-
-    homework = await get_homework_record(
-        db,
-        homework_id=homework_id,
-        load_lesson=True,
-        **homework_filters,
-    )
-
-    if not homework:
+    except NotFoundError:
         raise HTTPException(404, "Homework not found")
-
-    return serialize_homework(homework)
 
 
 @router.post("/create")
@@ -79,28 +68,18 @@ async def create_homework(
     user: UserDAO = Depends(get_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> HomeworkGetSchema:
-    if homework.lesson_id is None:
-        raise HTTPException(400, "lesson_id is required")
-
     try:
-        homework_dao = await create_homework_record(
-            db,
-            lesson_id=homework.lesson_id,
-            teacher_id=user.id,
-            name=homework.name,
-            description=homework.description,
-            files_urls=homework.files_urls,
-            answer=homework.answer,
-            sent_files=homework.sent_files,
-            deadline=homework.deadline,
+        return await create_homework_for_teacher(
+            db=db,
+            user=user,
+            homework=homework,
         )
-    except ValueError as error:
+    except ValidationError as error:
+        raise HTTPException(400, str(error)) from error
+    except ConflictError as error:
         raise HTTPException(409, str(error)) from error
-
-    if homework_dao is None:
-        raise HTTPException(404, "Lesson not found")
-
-    return serialize_homework(homework_dao)
+    except NotFoundError as error:
+        raise HTTPException(404, "Lesson not found") from error
 
 
 @router.put("/update/{homework_id}")
@@ -113,23 +92,17 @@ async def update_homework(
     logger.info(
         f"Received update request for homework {homework_id} with data: {homework}"
     )
-
-    homework_filters = get_homework_filters(user)
-
-    if homework_filters is None:
-        raise HTTPException(403, "Forbidden")
-
-    homework_dao = await update_homework_record(
-        db,
-        homework_id=homework_id,
-        **homework_filters,
-        **get_homework_update_data(homework, user),
-    )
-
-    if not homework_dao:
-        raise HTTPException(404, "Homework not found")
-
-    return serialize_homework(homework_dao)
+    try:
+        return await update_homework_for_user(
+            db=db,
+            homework_id=homework_id,
+            user=user,
+            homework=homework,
+        )
+    except ForbiddenError as error:
+        raise HTTPException(403, "Forbidden") from error
+    except NotFoundError as error:
+        raise HTTPException(404, "Homework not found") from error
 
 
 @router.delete("/delete/{homework_id}")
@@ -138,13 +111,11 @@ async def delete_homework(
     user: UserDAO = Depends(get_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> int:
-    homework_dao = await soft_delete_homework(
-        db,
-        homework_id=homework_id,
-        teacher_id=user.id,
-    )
-
-    if not homework_dao:
-        raise HTTPException(404, "Homework not found")
-
-    return homework_dao.id
+    try:
+        return await delete_homework_for_teacher(
+            db=db,
+            homework_id=homework_id,
+            user=user,
+        )
+    except NotFoundError as error:
+        raise HTTPException(404, "Homework not found") from error

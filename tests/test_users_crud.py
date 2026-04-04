@@ -3,7 +3,6 @@ from types import SimpleNamespace
 import pytest
 
 from src.routers.Users import crud as users_crud
-from src.schemas import KeycloakUser
 
 
 class FakeExecuteResult:
@@ -35,19 +34,11 @@ class FakeAsyncSession:
 
 
 @pytest.mark.asyncio
-async def test_get_or_create_user_returns_existing_user_without_creating_new_one():
+async def test_get_user_returns_existing_user():
     existing_user = SimpleNamespace(id="user-1")
     session = FakeAsyncSession(existing_user=existing_user)
-    keycloak_user = KeycloakUser(
-        id="user-1",
-        username="existing",
-        email="existing@example.com",
-        last_name="User",
-        role="teacher",
-        realm_roles=[],
-    )
 
-    result = await users_crud.get_or_create_user(session, keycloak_user=keycloak_user)
+    result = await users_crud.get_user(session, user_id="user-1")
 
     assert result is existing_user
     assert session.added == []
@@ -56,18 +47,17 @@ async def test_get_or_create_user_returns_existing_user_without_creating_new_one
 
 
 @pytest.mark.asyncio
-async def test_get_or_create_user_creates_user_when_missing():
+async def test_create_user_persists_record():
     session = FakeAsyncSession(existing_user=None)
-    keycloak_user = KeycloakUser(
-        id="user-2",
-        username="new-user",
-        email="new@example.com",
-        last_name="User",
-        role="student",
-        realm_roles=[],
-    )
 
-    result = await users_crud.get_or_create_user(session, keycloak_user=keycloak_user)
+    result = await users_crud.create_user(
+        session,
+        user_id="user-2",
+        name="new-user",
+        surname="User",
+        email="new@example.com",
+        role="student",
+    )
 
     assert result.id == "user-2"
     assert result.email == "new@example.com"

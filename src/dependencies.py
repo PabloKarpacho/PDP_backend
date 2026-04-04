@@ -6,8 +6,8 @@ from src.constants import Roles
 from src.database_control.postgres import get_db
 from src.logger import logger
 from src.models import UserDAO
-from src.routers.Users.crud import get_or_create_user
 from src.schemas import KeycloakUser
+from src.services.users import get_or_create_user_from_keycloak
 
 
 async def get_user(
@@ -24,7 +24,7 @@ async def get_user(
         Application user entity from the local database.
     """
     logger.info(f"get_user dependency called with keycloak_user.id: {keycloak_user.id}")
-    return await get_or_create_user(keycloak_user=keycloak_user, db=db)
+    return await get_or_create_user_from_keycloak(keycloak_user=keycloak_user, db=db)
 
 
 async def get_teacher(
@@ -51,4 +51,4 @@ async def get_teacher(
             detail="Forbidden",
         )
 
-    return await get_or_create_user(keycloak_user=keycloak_user, db=db)
+    return await get_or_create_user_from_keycloak(keycloak_user=keycloak_user, db=db)

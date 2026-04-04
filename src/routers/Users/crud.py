@@ -1,9 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.logger import logger
 from src.models import UserDAO
-from src.schemas import KeycloakUser
 
 
 async def get_user(
@@ -16,28 +14,24 @@ async def get_user(
     return result.scalar_one_or_none()
 
 
-async def get_or_create_user(
+async def create_user(
     db: AsyncSession,
     *,
-    keycloak_user: KeycloakUser,
+    user_id: str,
+    name: str | None,
+    surname: str | None,
+    email: str,
+    role: str | None,
 ) -> UserDAO:
-    """Return an existing application user or create one from Keycloak data."""
-    logger.info(f"get_user called with keycloak_user.id: {keycloak_user.id}")
-    user = await get_user(db, user_id=keycloak_user.id)
-
-    if user is not None:
-        return user
-
+    """Create a new application user record."""
     user = UserDAO(
-        id=keycloak_user.id,
-        name=keycloak_user.username,
-        surname=keycloak_user.last_name,
-        email=keycloak_user.email,
-        role=keycloak_user.role,
+        id=user_id,
+        name=name,
+        surname=surname,
+        email=email,
+        role=role,
     )
     db.add(user)
     await db.commit()
     await db.refresh(user)
-
-    logger.info(f"Добавили пользователя {user.id}")
     return user

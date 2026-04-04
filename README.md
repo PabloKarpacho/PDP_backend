@@ -1,5 +1,7 @@
 # PDP Backend
 
+[![codecov](https://codecov.io/gh/PabloKarpacho/PDP_backend/graph/badge.svg?token=O2mbV4lXaV)](https://codecov.io/gh/PabloKarpacho/PDP_backend)
+
 Короткая инструкция по локальному запуску проекта через Docker Compose.
 
 ## Что поднимается
@@ -31,14 +33,11 @@ cp env.example .env
 docker compose up -d --build
 ```
 
-3. Примените миграции явной командой:
+3. Примените миграции командой:
 
 ```bash
 uv run python -m alembic upgrade head
 ```
-
-Это единственный поддерживаемый путь миграций для local/dev и production.
-Приложение больше не применяет миграции во время runtime startup.
 
 4. Проверьте, что контейнеры поднялись:
 

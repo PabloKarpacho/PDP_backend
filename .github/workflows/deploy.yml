@@ -57,7 +57,21 @@ jobs:
     needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
-      - name: Deploy via SSH
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Copy deploy script to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT }}
+          source: scripts/deploy-backend.sh
+          target: /tmp/pdp-backend-deploy
+          strip_components: 1
+
+      - name: Run deploy script via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.DEPLOY_HOST }}
@@ -65,4 +79,5 @@ jobs:
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ secrets.DEPLOY_PORT }}
           script: |
-            /home/deploy/bin/deploy-backend.sh
+            chmod +x /tmp/pdp-backend-deploy/deploy-backend.sh
+            APP_DIR="${{ secrets.DEPLOY_APP_DIR }}" BRANCH=main /tmp/pdp-backend-deploy/deploy-backend.sh

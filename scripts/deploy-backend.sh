@@ -5,6 +5,29 @@ set -euo pipefail
 APP_DIR="${APP_DIR:-/opt/PDP_backend}"
 BRANCH="${BRANCH:-main}"
 BACKEND_SERVICE="${BACKEND_SERVICE:-pdp-backend}"
+
+resolve_keycloak_db_password() {
+  if [ -n "${KC_DB_PASSWORD:-}" ]; then
+    return
+  fi
+
+  local secret_id="${KC_DB_AWS_SECRET_ID:-}"
+  local region="${KC_DB_AWS_REGION:-${AWS_POSTGRES_REGION:-}}"
+
+  if [ -z "$secret_id" ]; then
+    return
+  fi
+
+  echo "==> Resolving Keycloak database password from AWS Secrets Manager"
+  KC_DB_PASSWORD="$(
+    KC_DB_PASSWORD="${KC_DB_PASSWORD:-}" \
+    KC_DB_AWS_SECRET_ID="$secret_id" \
+    KC_DB_AWS_REGION="$region" \
+    uv run python -m src.services.keycloak_secret
+  )"
+  export KC_DB_PASSWORD
+}
+
 print_backend_diagnostics() {
   echo "==> Backend container status"
   docker compose ps "$BACKEND_SERVICE" || true
@@ -34,6 +57,7 @@ set -a
 source ./.env
 set +a
 
+resolve_keycloak_db_password
 echo "==> Building backend image"
 docker compose build "$BACKEND_SERVICE"
 

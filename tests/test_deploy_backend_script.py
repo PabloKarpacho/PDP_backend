@@ -14,11 +14,11 @@ def _write_executable(path: Path, content: str) -> None:
     path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 
-def _prepare_fake_app_dir(tmp_path: Path) -> Path:
+def _prepare_fake_app_dir(tmp_path: Path, env_content: str = "APP_PORT=8001\n") -> Path:
     app_dir = tmp_path / "app"
     app_dir.mkdir()
     (app_dir / ".git").mkdir()
-    (app_dir / ".env").write_text("APP_PORT=8001\n")
+    (app_dir / ".env").write_text(env_content)
     return app_dir
 
 
@@ -52,14 +52,27 @@ def _prepare_fake_bin(tmp_path: Path, docker_up_mode: str) -> Path:
         exit 0
         """,
     )
+    _write_executable(
+        bin_dir / "uv",
+        """#!/usr/bin/env bash
+        echo "$*" >> "$TEST_STATE_DIR/uv.log"
+        if [ "$1 $2 $3 $4" = "run python -m src.services.keycloak_secret" ]; then
+          echo "aws-secret-password"
+          exit 0
+        fi
+        exit 0
+        """,
+    )
 
     return bin_dir
 
 
 def _run_script(
-    tmp_path: Path, docker_up_mode: str = "success"
+    tmp_path: Path,
+    docker_up_mode: str = "success",
+    env_content: str = "APP_PORT=8001\n",
 ) -> subprocess.CompletedProcess[str]:
-    app_dir = _prepare_fake_app_dir(tmp_path)
+    app_dir = _prepare_fake_app_dir(tmp_path, env_content=env_content)
     bin_dir = _prepare_fake_bin(tmp_path, docker_up_mode=docker_up_mode)
     env = os.environ.copy()
     env.update(
@@ -105,3 +118,25 @@ def test_deploy_backend_reports_backend_start_failure_cleanly(tmp_path: Path) ->
     assert "Backend container failed to start" in result.stdout
     assert "compose up -d --force-recreate pdp-backend" in docker_log
     assert result.stderr == ""
+
+
+def test_deploy_backend_resolves_keycloak_password_from_aws_secret(
+    tmp_path: Path,
+) -> None:
+    result = _run_script(
+        tmp_path,
+        env_content=(
+            "APP_PORT=8001\n"
+            "AWS_POSTGRES_REGION=eu-north-1\n"
+            "KC_DB_PASSWORD=\n"
+            "KC_DB_AWS_SECRET_ID=secret-id\n"
+        ),
+    )
+    uv_log = (tmp_path / "state" / "uv.log").read_text()
+
+    assert result.returncode == 0
+    assert (
+        "==> Resolving Keycloak database password from AWS Secrets Manager"
+        in result.stdout
+    )
+    assert "run python -m src.services.keycloak_secret" in uv_log

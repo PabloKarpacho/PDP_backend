@@ -12,7 +12,7 @@ from src.routers.Lessons.schemas import (
     LessonUpdateSchema,
 )
 from src.schemas import ResponseEnvelope, success_response
-from src.services.exceptions import NotFoundError
+from src.services.exceptions import NotFoundError, ValidationError
 from src.services.lessons import (
     create_lesson_for_teacher,
     delete_lesson_for_teacher,
@@ -48,8 +48,11 @@ async def create_lesson(
     user: UserDAO = Depends(get_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> ResponseEnvelope[LessonGetSchema]:
-    lesson_data = await create_lesson_for_teacher(db=db, user=user, lesson=lesson)
-    return success_response(lesson_data)
+    try:
+        lesson_data = await create_lesson_for_teacher(db=db, user=user, lesson=lesson)
+        return success_response(lesson_data)
+    except ValidationError as error:
+        raise HTTPException(400, str(error)) from error
 
 
 @router.put("/update/{lesson_id}", response_model=ResponseEnvelope[LessonGetSchema])
@@ -70,6 +73,8 @@ async def update_lesson(
         return success_response(lesson_data)
     except NotFoundError:
         raise HTTPException(404, "Lesson not found")
+    except ValidationError as error:
+        raise HTTPException(400, str(error)) from error
 
 
 @router.delete("/delete/{lesson_id}", response_model=ResponseEnvelope[int])

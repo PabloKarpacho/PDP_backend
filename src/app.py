@@ -112,6 +112,24 @@ def _extract_error_message_and_details(detail):
     return "Request failed", detail
 
 
+def _serialize_validation_details(details):
+    if isinstance(details, dict):
+        return {
+            key: _serialize_validation_details(value) for key, value in details.items()
+        }
+
+    if isinstance(details, list):
+        return [_serialize_validation_details(item) for item in details]
+
+    if isinstance(details, tuple):
+        return [_serialize_validation_details(item) for item in details]
+
+    if isinstance(details, Exception):
+        return str(details)
+
+    return details
+
+
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     tb_str = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
@@ -139,7 +157,7 @@ async def request_validation_exception_handler(
         content=error_response(
             code="bad_request",
             message="Request validation failed",
-            details=exc.errors(),
+            details=_serialize_validation_details(exc.errors()),
         ).model_dump(mode="json"),
     )
 

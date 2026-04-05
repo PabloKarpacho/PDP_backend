@@ -43,13 +43,18 @@ def build_homework_payload():
         "name": "Homework 1",
         "description": "Solve tasks",
         "files_urls": ["task.pdf"],
-        "answer": None,
-        "sent_files": None,
         "deadline": now + timedelta(days=1),
         "lesson_id": 5,
-        "is_deleted": False,
-        "updated_at": now,
-        "created_at": now,
+    }
+
+
+def build_homework_update_payload():
+    now = datetime.now()
+    return {
+        "name": "Homework 1",
+        "description": "Solve tasks",
+        "files_urls": ["task.pdf"],
+        "deadline": now + timedelta(days=1),
     }
 
 
@@ -241,7 +246,7 @@ async def test_update_homework_for_student_uses_service(monkeypatch):
     db = object()
     homework_payload = HomeworkUpdateSchema(
         **{
-            **build_homework_payload(),
+            **build_homework_update_payload(),
             "description": "teacher-only field",
             "answer": "done",
             "sent_files": ["answer.pdf"],
@@ -277,7 +282,7 @@ async def test_update_homework_maps_not_found_to_404(monkeypatch):
 
     with pytest.raises(HTTPException) as exc_info:
         await homework_router_module.update_homework(
-            homework=HomeworkUpdateSchema(**build_homework_payload()),
+            homework=HomeworkUpdateSchema(**build_homework_update_payload()),
             homework_id=9,
             user=SimpleNamespace(id="student-1", role=Roles.STUDENT),
             db=object(),

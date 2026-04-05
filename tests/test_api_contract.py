@@ -43,13 +43,8 @@ def build_homework_payload():
         "name": "Homework 1",
         "description": "Solve tasks",
         "files_urls": ["task.pdf"],
-        "answer": None,
-        "sent_files": None,
         "deadline": (now + timedelta(days=1)).isoformat(),
         "lesson_id": 5,
-        "is_deleted": False,
-        "updated_at": now.isoformat(),
-        "created_at": now.isoformat(),
     }
 
 
@@ -60,13 +55,8 @@ def build_lesson_payload():
         "end_time": (now + timedelta(hours=1)).isoformat(),
         "theme": "Math",
         "lesson_description": "Algebra",
-        "teacher_id": "teacher-1",
         "student_id": "student-1",
         "status": LessonStatuses.ACTIVE,
-        "homework_id": None,
-        "is_deleted": False,
-        "updated_at": now.isoformat(),
-        "created_at": now.isoformat(),
     }
 
 

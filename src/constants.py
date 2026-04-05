@@ -9,6 +9,19 @@ class LessonStatuses:
     CANCELLED = "cancelled"
 
 
+LESSON_STATUS_TRANSITIONS: dict[str, frozenset[str]] = {
+    LessonStatuses.ACTIVE: frozenset(
+        {
+            LessonStatuses.ACTIVE,
+            LessonStatuses.PASSED,
+            LessonStatuses.CANCELLED,
+        }
+    ),
+    LessonStatuses.PASSED: frozenset({LessonStatuses.PASSED}),
+    LessonStatuses.CANCELLED: frozenset({LessonStatuses.CANCELLED}),
+}
+
+
 def normalize_role_name(role: str | None) -> str | None:
     if role is None:
         return None
@@ -45,3 +58,13 @@ def resolve_authoritative_role(realm_roles: list[str] | None) -> str | None:
 
 def role_matches(role: str | None, target_role: str) -> bool:
     return normalize_role_name(role) == normalize_role_name(target_role)
+
+
+def is_allowed_lesson_status_transition(
+    current_status: str,
+    new_status: str,
+) -> bool:
+    return new_status in LESSON_STATUS_TRANSITIONS.get(
+        current_status,
+        frozenset(),
+    )

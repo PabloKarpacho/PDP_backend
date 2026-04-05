@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel, Field, model_validator
@@ -72,6 +73,39 @@ class ResponseEnvelope(BaseModel, Generic[ResponseDataT]):
 
 class HealthStatusSchema(BaseModel):
     status: str
+
+
+def normalize_datetime_to_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+
+    return value.astimezone(UTC)
+
+
+def normalize_optional_string(value: str | None) -> str | None:
+    if value is None:
+        return None
+
+    normalized_value = value.strip()
+    return normalized_value or None
+
+
+def normalize_string_list(
+    values: list[str] | None,
+    *,
+    field_name: str,
+) -> list[str] | None:
+    if values is None:
+        return None
+
+    normalized_values: list[str] = []
+    for value in values:
+        normalized_value = value.strip()
+        if not normalized_value:
+            raise ValueError(f"{field_name} must not be blank")
+        normalized_values.append(normalized_value)
+
+    return normalized_values
 
 
 def success_response(

@@ -2,9 +2,14 @@ import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.constants import Roles, role_matches
+from src.constants import (
+    Roles,
+    is_allowed_lesson_status_transition,
+    role_matches,
+)
 from src.models import UserDAO
 from src.routers.Lessons.crud import create_lesson as create_lesson_record
+from src.routers.Lessons.crud import get_lesson as get_lesson_record
 from src.routers.Lessons.crud import list_lessons as list_lessons_records
 from src.routers.Lessons.crud import soft_delete_lesson as soft_delete_lesson_record
 from src.routers.Lessons.crud import update_lesson as update_lesson_record
@@ -14,7 +19,7 @@ from src.routers.Lessons.schemas import (
     LessonUpdateSchema,
 )
 from src.routers.Lessons.utils import serialize_lesson
-from src.services.exceptions import NotFoundError
+from src.services.exceptions import NotFoundError, ValidationError
 
 
 def _get_lesson_filters(user: UserDAO) -> dict[str, str] | None:
@@ -34,6 +39,15 @@ def _get_lesson_update_data(lesson: LessonUpdateSchema) -> dict:
     payload.pop("updated_at", None)
     payload.pop("created_at", None)
     return payload
+
+
+def _validate_lesson_time_range(
+    *,
+    start_time: datetime.datetime,
+    end_time: datetime.datetime,
+) -> None:
+    if start_time >= end_time:
+        raise ValidationError("start_time must be before end_time")
 
 
 async def list_lessons_for_user(
@@ -83,15 +97,34 @@ async def update_lesson_for_teacher(
     user: UserDAO,
     lesson: LessonUpdateSchema,
 ) -> LessonGetSchema:
+    existing_lesson = await get_lesson_record(
+        db,
+        lesson_id=lesson_id,
+        teacher_id=user.id,
+    )
+
+    if existing_lesson is None:
+        raise NotFoundError("Lesson not found")
+
+    update_data = _get_lesson_update_data(lesson)
+
+    _validate_lesson_time_range(
+        start_time=update_data.get("start_time", existing_lesson.start_time),
+        end_time=update_data.get("end_time", existing_lesson.end_time),
+    )
+
+    if "status" in update_data and not is_allowed_lesson_status_transition(
+        existing_lesson.status,
+        update_data["status"],
+    ):
+        raise ValidationError("Invalid lesson status transition")
+
     lesson_dao = await update_lesson_record(
         db,
         lesson_id=lesson_id,
         teacher_id=user.id,
-        **_get_lesson_update_data(lesson),
+        **update_data,
     )
-
-    if lesson_dao is None:
-        raise NotFoundError("Lesson not found")
 
     return serialize_lesson(lesson_dao)
 

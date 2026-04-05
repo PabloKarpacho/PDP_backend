@@ -108,8 +108,8 @@ async def create_homework_for_teacher(
             name=homework.name,
             description=homework.description,
             files_urls=homework.files_urls,
-            answer=homework.answer,
-            sent_files=homework.sent_files,
+            answer=None,
+            sent_files=None,
             deadline=homework.deadline,
         )
     except ValueError as error:

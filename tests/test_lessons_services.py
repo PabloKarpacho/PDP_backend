@@ -5,7 +5,7 @@ import pytest
 
 from src.constants import LessonStatuses, Roles
 from src.services import lessons as lessons_service
-from src.services.exceptions import NotFoundError
+from src.services.exceptions import NotFoundError, ValidationError
 
 
 class FakeAsyncSession:
@@ -84,9 +84,13 @@ async def test_list_lessons_for_unknown_role_returns_empty_list():
 
 @pytest.mark.asyncio
 async def test_update_lesson_for_teacher_raises_not_found(monkeypatch):
+    async def fake_get_lesson(db, *, lesson_id, teacher_id):
+        return None
+
     async def fake_update_lesson(db, *, lesson_id, teacher_id, **update_data):
         return None
 
+    monkeypatch.setattr(lessons_service, "get_lesson_record", fake_get_lesson)
     monkeypatch.setattr(lessons_service, "update_lesson_record", fake_update_lesson)
 
     with pytest.raises(NotFoundError, match="Lesson not found"):
@@ -135,3 +139,52 @@ async def test_create_lesson_for_teacher_uses_current_teacher_id(monkeypatch):
     assert captured["db"] is db
     assert captured["payload"]["teacher_id"] == "teacher-1"
     assert captured["payload"]["student_id"] == "student-1"
+
+
+@pytest.mark.asyncio
+async def test_update_lesson_for_teacher_rejects_invalid_status_transition(monkeypatch):
+    async def fake_get_lesson(db, *, lesson_id, teacher_id):
+        return build_lesson(status=LessonStatuses.PASSED)
+
+    async def fake_update_lesson(db, *, lesson_id, teacher_id, **update_data):
+        raise AssertionError("Update should not be called for invalid transition")
+
+    monkeypatch.setattr(lessons_service, "get_lesson_record", fake_get_lesson)
+    monkeypatch.setattr(lessons_service, "update_lesson_record", fake_update_lesson)
+
+    with pytest.raises(ValidationError, match="Invalid lesson status transition"):
+        await lessons_service.update_lesson_for_teacher(
+            db=FakeAsyncSession(),
+            lesson_id=42,
+            user=build_user(),
+            lesson=SimpleNamespace(
+                model_dump=lambda **kwargs: {"status": LessonStatuses.ACTIVE}
+            ),
+        )
+
+
+@pytest.mark.asyncio
+async def test_update_lesson_for_teacher_rejects_invalid_resulting_time_range(
+    monkeypatch,
+):
+    async def fake_get_lesson(db, *, lesson_id, teacher_id):
+        return build_lesson(
+            start_time=datetime(2026, 3, 29, 10, 0),
+            end_time=datetime(2026, 3, 29, 11, 0),
+        )
+
+    async def fake_update_lesson(db, *, lesson_id, teacher_id, **update_data):
+        raise AssertionError("Update should not be called for invalid time range")
+
+    monkeypatch.setattr(lessons_service, "get_lesson_record", fake_get_lesson)
+    monkeypatch.setattr(lessons_service, "update_lesson_record", fake_update_lesson)
+
+    with pytest.raises(ValidationError, match="start_time must be before end_time"):
+        await lessons_service.update_lesson_for_teacher(
+            db=FakeAsyncSession(),
+            lesson_id=42,
+            user=build_user(),
+            lesson=SimpleNamespace(
+                model_dump=lambda **kwargs: {"end_time": datetime(2026, 3, 29, 9, 0)}
+            ),
+        )

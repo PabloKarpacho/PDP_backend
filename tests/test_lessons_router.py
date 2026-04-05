@@ -41,13 +41,8 @@ def build_lesson_payload():
         "end_time": now + timedelta(hours=1),
         "theme": "Math",
         "lesson_description": "Algebra",
-        "teacher_id": "body-teacher-id",
         "student_id": "student-1",
         "status": LessonStatuses.ACTIVE,
-        "homework_id": None,
-        "is_deleted": False,
-        "updated_at": now,
-        "created_at": now,
     }
 
 

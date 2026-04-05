@@ -14,6 +14,11 @@ def resolve_alembic_database_url(default_url: str) -> str:
     if database_url:
         return database_url
 
+    if os.getenv("DATABASE_BACKEND", "").strip().lower() == "aws":
+        runtime_dsn = get_database_runtime_config().sync_dsn
+        if runtime_dsn:
+            return runtime_dsn
+
     project_dsn = os.getenv("POSTGRESQL_DSN")
     if project_dsn:
         return build_sync_dsn_for_alembic(project_dsn)

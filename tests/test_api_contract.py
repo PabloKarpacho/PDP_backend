@@ -105,7 +105,29 @@ def test_users_me_endpoint_uses_success_envelope(client: TestClient):
 
 def test_files_upload_endpoint_uses_success_envelope(client: TestClient, monkeypatch):
     class FakeS3Client:
-        async def upload_file(self, *, fileobj, key, bucket_name):
+        async def upload_bytes(
+            self,
+            *,
+            data,
+            key,
+            bucket_name,
+            content_type=None,
+            metadata=None,
+        ):
+            return type(
+                "StoredObject",
+                (),
+                {
+                    "bucket_name": bucket_name,
+                    "key": key,
+                    "content_type": content_type,
+                    "size": len(data),
+                },
+            )()
+
+        async def generate_presigned_download_url(
+            self, *, key, bucket_name, url_expiry=3600
+        ):
             return "https://example.com/file"
 
     monkeypatch.setattr(files_router_module, "get_s3_client", lambda: FakeS3Client())
@@ -116,11 +138,16 @@ def test_files_upload_endpoint_uses_success_envelope(client: TestClient, monkeyp
     )
 
     assert response.status_code == 200
-    assert response.json() == {
-        "success": True,
-        "data": {"url": "https://example.com/file"},
-        "error": None,
-        "meta": {"pagination": None},
+    assert response.json()["success"] is True
+    assert response.json()["error"] is None
+    assert response.json()["meta"] == {"pagination": None}
+    assert response.json()["data"] == {
+        "url": "https://example.com/file",
+        "key": response.json()["data"]["key"],
+        "bucket_name": "pdp-files",
+        "original_filename": "lesson.txt",
+        "content_type": "text/plain",
+        "size": 7,
     }
 
 

@@ -56,6 +56,16 @@ class Settings(BaseSettings):
     MINIO_ROOT_PASSWORD: str = "CHANGEME123"
     MINIO_FILES_BUCKET_NAME: str = "pdp-files"
     MINIO_SECURE: bool = False
+    FILE_UPLOAD_MAX_BYTES: int = 10 * 1024 * 1024
+    FILE_UPLOAD_ALLOWED_CONTENT_TYPES: tuple[str, ...] = (
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "application/pdf",
+        "text/plain",
+        "application/octet-stream",
+    )
+    FILE_UPLOAD_URL_EXPIRY_SECONDS: int = 3600
 
     # KEYCLOACK
     KEYCLOACK_HOST_URL: str = Field(

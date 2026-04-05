@@ -12,6 +12,10 @@ from src.schemas import KeycloakUser
 
 def get_current_user_profile(user: UserDAO) -> UserGetSchema:
     """Serialize the authenticated user into the API schema."""
+    logger.info(
+        "Serializing current user profile.",
+        extra={"user_id": user.id, "role": user.role},
+    )
     return serialize_user(user)
 
 
@@ -25,7 +29,13 @@ async def get_or_create_user_from_keycloak(
     keycloak_user: KeycloakUser,
 ) -> UserDAO:
     """Load the application user or create one from Keycloak claims."""
-    logger.info(f"get_user called with keycloak_user.id: {keycloak_user.id}")
+    logger.info(
+        "Synchronizing application user from Keycloak.",
+        extra={
+            "user_id": keycloak_user.id,
+            "realm_roles": keycloak_user.realm_roles,
+        },
+    )
     user = await get_user_record(db, user_id=keycloak_user.id)
 
     if user is not None:
@@ -35,6 +45,10 @@ async def get_or_create_user_from_keycloak(
             or user.email != keycloak_user.email
             or user.role != keycloak_user.role
         ):
+            logger.info(
+                "Updating existing application user from Keycloak.",
+                extra={"user_id": keycloak_user.id},
+            )
             return await update_user_record(
                 db,
                 user=user,
@@ -43,8 +57,16 @@ async def get_or_create_user_from_keycloak(
                 email=keycloak_user.email,
                 role=keycloak_user.role,
             )
+        logger.info(
+            "Existing application user is already in sync.",
+            extra={"user_id": keycloak_user.id},
+        )
         return user
 
+    logger.info(
+        "Creating application user from Keycloak.",
+        extra={"user_id": keycloak_user.id},
+    )
     user = await create_user_record(
         db,
         user_id=keycloak_user.id,
@@ -53,5 +75,8 @@ async def get_or_create_user_from_keycloak(
         email=keycloak_user.email,
         role=keycloak_user.role,
     )
-    logger.info(f"Добавили пользователя {user.id}")
+    logger.info(
+        "Application user created.",
+        extra={"user_id": user.id, "role": user.role},
+    )
     return user

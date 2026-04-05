@@ -1,5 +1,6 @@
 import time
 import traceback
+import uuid
 
 from fastapi import FastAPI
 from fastapi import Request
@@ -10,6 +11,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.logger import logger
+from src.logger import sanitize_log_data
 from src.routers import files_router
 from src.routers import homework_router
 from src.routers import lesson_router
@@ -24,10 +26,21 @@ from src.startup import create_lifespan
 
 
 routers = [user_router, lesson_router, homework_router, files_router]
+REQUEST_ID_HEADER = "X-Request-ID"
 
 
 class CustomMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
+        request_id = request.headers.get(REQUEST_ID_HEADER) or uuid.uuid4().hex
+        request.state.request_id = request_id
+        logger.clear_context()
+        logger.bind(
+            request_id=request_id,
+            method=request.method,
+            path=request.url.path,
+            host=request.url.netloc,
+        )
+        logger.info("Request started.")
         start_time = time.time()
         try:
             response = await call_next(request)
@@ -38,33 +51,31 @@ class CustomMiddleware(BaseHTTPMiddleware):
                 traceback.format_exception(type(exc), exc, exc.__traceback__)
             )
             logger.error(
-                f"Unhandled exception while processing request: {tb_str}",
+                "Unhandled exception while processing request.",
                 extra={
                     "http_status_code": 500,
                     "time_taken": time_taken,
-                    "method": request.method,
-                    "host": request.url.netloc,
-                    "path": request.url.path,
+                    "error_type": type(exc).__name__,
+                    "traceback": sanitize_log_data(tb_str),
                 },
             )
             logger.dump()
+            logger.clear_context()
             raise
 
         end_time = time.time()
         time_taken = end_time - start_time
 
         logger.info(
-            "\nЗакончили запрос",
+            "Request completed.",
             extra={
                 "http_status_code": response.status_code,
                 "time_taken": time_taken,
-                "method": request.method,
-                "host": request.url.netloc,
-                "path": request.url.path,
             },
         )
-
+        response.headers[REQUEST_ID_HEADER] = request_id
         logger.dump()
+        logger.clear_context()
 
         return response
 
@@ -130,11 +141,29 @@ def _serialize_validation_details(details):
     return details
 
 
+def _request_log_extra(request: Request, **extra):
+    request_id = getattr(request.state, "request_id", None)
+    request_extra = {
+        "request_id": request_id,
+        "method": request.method,
+        "path": request.url.path,
+    }
+    request_extra.update(extra)
+    return request_extra
+
+
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
-    tb_str = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
-    logger.error(f"""Exception detail: {exc.detail}\nTraceback: {tb_str}""")
     message, details = _extract_error_message_and_details(exc.detail)
+    logger.error(
+        "HTTP exception raised.",
+        extra=_request_log_extra(
+            request,
+            http_status_code=exc.status_code,
+            error_type=type(exc).__name__,
+            error_detail=exc.detail,
+        ),
+    )
     return JSONResponse(
         status_code=exc.status_code,
         content=error_response(
@@ -150,7 +179,13 @@ async def request_validation_exception_handler(
     request: Request, exc: RequestValidationError
 ):
     logger.error(
-        f"Request validation error on {request.method} {request.url.path}: {exc}"
+        "Request validation failed.",
+        extra=_request_log_extra(
+            request,
+            http_status_code=400,
+            error_type=type(exc).__name__,
+            validation_errors=_serialize_validation_details(exc.errors()),
+        ),
     )
     return JSONResponse(
         status_code=400,
@@ -164,18 +199,29 @@ async def request_validation_exception_handler(
 
 @app.exception_handler(Exception)
 async def unexpected_exception_handler(request: Request, exc: Exception):
-    tb_str = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
     logger.error(
-        f"Unhandled server error on {request.method} {request.url.path}\nTraceback: {tb_str}"
+        "Unhandled server error.",
+        extra=_request_log_extra(
+            request,
+            http_status_code=500,
+            error_type=type(exc).__name__,
+            traceback=sanitize_log_data(
+                "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+            ),
+        ),
     )
     logger.dump()
-    return JSONResponse(
+    response = JSONResponse(
         status_code=500,
         content=error_response(
             code="internal_server_error",
             message="Internal Server Error",
         ).model_dump(mode="json"),
     )
+    request_id = getattr(request.state, "request_id", None)
+    if request_id:
+        response.headers[REQUEST_ID_HEADER] = request_id
+    return response
 
 
 @app.get(

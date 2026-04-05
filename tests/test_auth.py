@@ -1,6 +1,8 @@
 import pytest
+from starlette.exceptions import HTTPException
 
-from src.auth import get_user_info
+from src import auth as auth_module
+from src.auth import get_payload, get_user_info
 from src.constants import Roles
 
 
@@ -72,3 +74,18 @@ async def test_get_user_info_uses_top_level_role_when_realm_roles_are_missing():
     assert user.last_name == "Karpov"
     assert user.role == Roles.TEACHER
     assert user.realm_roles == [Roles.TEACHER]
+
+
+@pytest.mark.asyncio
+async def test_get_payload_hides_token_decode_details(monkeypatch):
+    class FailingKeycloakOpenID:
+        def decode_token(self, token, validate=True):
+            raise RuntimeError("token=secret-value is invalid")
+
+    monkeypatch.setattr(auth_module, "keycloak_openid", FailingKeycloakOpenID())
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_payload(token="Bearer secret-value")
+
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.detail == "Invalid authentication credentials"

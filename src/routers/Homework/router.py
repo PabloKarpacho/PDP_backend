@@ -37,6 +37,14 @@ async def get_homeworks(
     db: AsyncSession = Depends(get_db),
     lesson_id: int | None = None,
 ) -> ResponseEnvelope[list[HomeworkGetSchema]]:
+    logger.info(
+        "Homework list requested.",
+        extra={
+            "user_id": user.id,
+            "role": user.role,
+            "lesson_id": lesson_id,
+        },
+    )
     homeworks = await list_homeworks_for_user(
         db=db,
         user=user,
@@ -51,16 +59,32 @@ async def get_homework(
     user: UserDAO = Depends(get_user),
     db: AsyncSession = Depends(get_db),
 ) -> ResponseEnvelope[HomeworkGetSchema]:
+    logger.info(
+        "Homework detail requested.",
+        extra={"user_id": user.id, "homework_id": homework_id},
+    )
     try:
         homework_data = await get_homework_for_user(
             db=db,
             homework_id=homework_id,
             user=user,
         )
+        logger.info(
+            "Homework detail loaded successfully.",
+            extra={"user_id": user.id, "homework_id": homework_id},
+        )
         return success_response(homework_data)
     except ForbiddenError:
+        logger.error(
+            "Homework access forbidden.",
+            extra={"user_id": user.id, "homework_id": homework_id},
+        )
         raise HTTPException(403, "Forbidden")
     except NotFoundError:
+        logger.error(
+            "Homework detail not found.",
+            extra={"user_id": user.id, "homework_id": homework_id},
+        )
         raise HTTPException(404, "Homework not found")
 
 
@@ -70,18 +94,44 @@ async def create_homework(
     user: UserDAO = Depends(get_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> ResponseEnvelope[HomeworkGetSchema]:
+    logger.info(
+        "Homework creation requested.",
+        extra={
+            "user_id": user.id,
+            "lesson_id": homework.lesson_id,
+        },
+    )
     try:
         homework_data = await create_homework_for_teacher(
             db=db,
             user=user,
             homework=homework,
         )
+        logger.info(
+            "Homework created successfully.",
+            extra={
+                "user_id": user.id,
+                "homework_id": getattr(homework_data, "id", None),
+            },
+        )
         return success_response(homework_data)
     except ValidationError as error:
+        logger.error(
+            "Homework creation rejected by validation.",
+            extra={"user_id": user.id, "error_type": type(error).__name__},
+        )
         raise HTTPException(400, str(error)) from error
     except ConflictError as error:
+        logger.error(
+            "Homework creation rejected by conflict.",
+            extra={"user_id": user.id, "error_type": type(error).__name__},
+        )
         raise HTTPException(409, str(error)) from error
     except NotFoundError as error:
+        logger.error(
+            "Homework creation failed because lesson was not found.",
+            extra={"user_id": user.id, "lesson_id": homework.lesson_id},
+        )
         raise HTTPException(404, "Lesson not found") from error
 
 
@@ -93,7 +143,12 @@ async def update_homework(
     db: AsyncSession = Depends(get_db),
 ) -> ResponseEnvelope[HomeworkGetSchema]:
     logger.info(
-        f"Received update request for homework {homework_id} with data: {homework}"
+        "Homework update requested.",
+        extra={
+            "user_id": user.id,
+            "homework_id": homework_id,
+            "fields": sorted(homework.model_dump(exclude_unset=True).keys()),
+        },
     )
     try:
         homework_data = await update_homework_for_user(
@@ -102,10 +157,25 @@ async def update_homework(
             user=user,
             homework=homework,
         )
+        logger.info(
+            "Homework updated successfully.",
+            extra={
+                "user_id": user.id,
+                "homework_id": getattr(homework_data, "id", homework_id),
+            },
+        )
         return success_response(homework_data)
     except ForbiddenError as error:
+        logger.error(
+            "Homework update forbidden.",
+            extra={"user_id": user.id, "homework_id": homework_id},
+        )
         raise HTTPException(403, "Forbidden") from error
     except NotFoundError as error:
+        logger.error(
+            "Homework update failed because homework was not found.",
+            extra={"user_id": user.id, "homework_id": homework_id},
+        )
         raise HTTPException(404, "Homework not found") from error
 
 
@@ -115,12 +185,24 @@ async def delete_homework(
     user: UserDAO = Depends(get_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> ResponseEnvelope[int]:
+    logger.info(
+        "Homework deletion requested.",
+        extra={"user_id": user.id, "homework_id": homework_id},
+    )
     try:
         homework_id_result = await delete_homework_for_teacher(
             db=db,
             homework_id=homework_id,
             user=user,
         )
+        logger.info(
+            "Homework deleted successfully.",
+            extra={"user_id": user.id, "homework_id": homework_id_result},
+        )
         return success_response(homework_id_result)
     except NotFoundError as error:
+        logger.error(
+            "Homework deletion failed because homework was not found.",
+            extra={"user_id": user.id, "homework_id": homework_id},
+        )
         raise HTTPException(404, "Homework not found") from error

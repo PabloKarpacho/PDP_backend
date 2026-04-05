@@ -85,7 +85,24 @@ async def run_startup_tasks() -> None:
 def create_lifespan(startup_runner: StartupRunner = run_startup_tasks):
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-        await startup_runner()
-        yield
+        logger.info("Application startup started.")
+        try:
+            await startup_runner()
+        except Exception as error:
+            logger.error(
+                "Application startup failed.",
+                extra={"error_type": type(error).__name__},
+            )
+            logger.dump()
+            raise
+
+        logger.info("Application startup completed.")
+        logger.dump()
+
+        try:
+            yield
+        finally:
+            logger.info("Application shutdown completed.")
+            logger.dump()
 
     return lifespan

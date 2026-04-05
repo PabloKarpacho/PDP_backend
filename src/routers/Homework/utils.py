@@ -25,11 +25,23 @@ def serialize_homework(homework: HomeworkDAO) -> HomeworkGetSchema:
 def get_homework_filters(user: UserDAO) -> dict[str, str] | None:
     """Build homework visibility filters based on the current user's role."""
     if user.role == Roles.STUDENT:
+        logger.info(
+            "Resolved homework filters for student.",
+            extra={"user_id": user.id},
+        )
         return {"student_id": user.id}
 
     if user.role == Roles.TEACHER:
+        logger.info(
+            "Resolved homework filters for teacher.",
+            extra={"user_id": user.id},
+        )
         return {"teacher_id": user.id}
 
+    logger.info(
+        "No homework filters resolved for user role.",
+        extra={"user_id": user.id, "role": user.role},
+    )
     return None
 
 
@@ -56,5 +68,12 @@ def get_homework_update_data(
             },
         )
 
-    logger.info(f"Prepared homework update payload: {payload}")
+    logger.info(
+        "Prepared homework update payload.",
+        extra={
+            "fields": sorted(payload.keys()),
+            "field_count": len(payload),
+            "user_id": user.id,
+        },
+    )
     return payload

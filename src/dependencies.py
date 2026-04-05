@@ -12,8 +12,23 @@ from src.services.users import get_or_create_user_from_keycloak
 
 def _require_keycloak_role(keycloak_user: KeycloakUser, required_role: str) -> None:
     if keycloak_user.has_role(required_role):
+        logger.info(
+            "Role guard passed.",
+            extra={
+                "user_id": keycloak_user.id,
+                "required_role": required_role,
+            },
+        )
         return
 
+    logger.error(
+        "Role guard failed.",
+        extra={
+            "user_id": keycloak_user.id,
+            "required_role": required_role,
+            "realm_roles": keycloak_user.realm_roles,
+        },
+    )
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
         detail="Forbidden",
@@ -33,7 +48,13 @@ async def get_user(
     Returns:
         Application user entity from the local database.
     """
-    logger.info(f"get_user dependency called with keycloak_user.id: {keycloak_user.id}")
+    logger.info(
+        "Resolving current application user.",
+        extra={
+            "user_id": keycloak_user.id,
+            "realm_roles": keycloak_user.realm_roles,
+        },
+    )
     return await get_or_create_user_from_keycloak(keycloak_user=keycloak_user, db=db)
 
 
@@ -53,6 +74,13 @@ async def get_teacher(
     Returns:
         Application user entity from the local database.
     """
+    logger.info(
+        "Resolving teacher dependency.",
+        extra={
+            "user_id": keycloak_user.id,
+            "realm_roles": keycloak_user.realm_roles,
+        },
+    )
     _require_keycloak_role(keycloak_user, Roles.TEACHER)
     return await get_or_create_user_from_keycloak(keycloak_user=keycloak_user, db=db)
 
@@ -61,5 +89,12 @@ async def get_student(
     keycloak_user: KeycloakUser = Depends(get_user_info),
     db: AsyncSession = Depends(get_db),
 ) -> UserDAO:
+    logger.info(
+        "Resolving student dependency.",
+        extra={
+            "user_id": keycloak_user.id,
+            "realm_roles": keycloak_user.realm_roles,
+        },
+    )
     _require_keycloak_role(keycloak_user, Roles.STUDENT)
     return await get_or_create_user_from_keycloak(keycloak_user=keycloak_user, db=db)

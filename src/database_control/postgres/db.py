@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from src.database_control.postgres.alembic_config import escape_alembic_config_value
 from src.config import CONFIG
+from src.logger import logger
 
 
 def _build_async_dsn(sync_dsn: str) -> str:
@@ -185,12 +186,35 @@ AsyncSessionLocal = async_sessionmaker(
 
 
 async def get_db() -> AsyncIterator[AsyncSession]:
-    async with db_semaphore:
-        async with AsyncSessionLocal() as session:
-            try:
-                yield session
-            finally:
-                await session.close()
+    try:
+        async with db_semaphore:
+            async with AsyncSessionLocal() as session:
+                try:
+                    yield session
+                except Exception as error:
+                    logger.error(
+                        "Database dependency failed during request.",
+                        extra={"error_type": type(error).__name__},
+                    )
+                    raise
+                finally:
+                    try:
+                        await session.close()
+                    except Exception as error:
+                        logger.error(
+                            "Database session close failed.",
+                            extra={"error_type": type(error).__name__},
+                        )
+                        raise
+    except Exception as error:
+        logger.error(
+            "Database session acquisition failed.",
+            extra={
+                "error_type": type(error).__name__,
+                "database_backend": CONFIG.DATABASE_BACKEND,
+            },
+        )
+        raise
 
 
 async def get_db_session() -> AsyncIterator[AsyncSession]:

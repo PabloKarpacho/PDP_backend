@@ -66,6 +66,15 @@ async def list_homeworks(
     include_deleted: bool = False,
 ) -> list[HomeworkDAO]:
     """Return homeworks matching the provided filters."""
+    logger.info(
+        "Executing homework list query.",
+        extra={
+            "lesson_id": lesson_id,
+            "teacher_id": teacher_id,
+            "student_id": student_id,
+            "include_deleted": include_deleted,
+        },
+    )
     statement = (
         select(HomeworkDAO)
         .join(HomeworkDAO.lesson)
@@ -80,7 +89,12 @@ async def list_homeworks(
     )
 
     result = await db.execute(statement)
-    return list(result.scalars().all())
+    homeworks = list(result.scalars().all())
+    logger.info(
+        "Homework list query completed.",
+        extra={"result_count": len(homeworks)},
+    )
+    return homeworks
 
 
 async def get_homework(
@@ -93,6 +107,16 @@ async def get_homework(
     load_lesson: bool = False,
 ) -> HomeworkDAO | None:
     """Return one homework by id with optional ownership filters."""
+    logger.info(
+        "Executing homework detail query.",
+        extra={
+            "homework_id": homework_id,
+            "teacher_id": teacher_id,
+            "student_id": student_id,
+            "include_deleted": include_deleted,
+            "load_lesson": load_lesson,
+        },
+    )
     statement = select(HomeworkDAO).join(HomeworkDAO.lesson)
 
     if load_lesson:
@@ -107,7 +131,12 @@ async def get_homework(
     )
 
     result = await db.execute(statement)
-    return result.scalar_one_or_none()
+    homework = result.scalar_one_or_none()
+    logger.info(
+        "Homework detail query completed.",
+        extra={"homework_id": homework_id, "homework_found": homework is not None},
+    )
+    return homework
 
 
 async def create_homework(
@@ -123,6 +152,10 @@ async def create_homework(
     deadline: datetime.datetime | None,
 ) -> HomeworkDAO | None:
     """Create a homework record and attach it to the requested lesson."""
+    logger.info(
+        "Creating homework in database.",
+        extra={"lesson_id": lesson_id, "teacher_id": teacher_id},
+    )
     statement = (
         select(LessonDAO)
         .options(selectinload(LessonDAO.homework))
@@ -136,9 +169,17 @@ async def create_homework(
     lesson = result.scalar_one_or_none()
 
     if lesson is None:
+        logger.info(
+            "Homework creation aborted because lesson was not found.",
+            extra={"lesson_id": lesson_id, "teacher_id": teacher_id},
+        )
         return None
 
     if lesson.homework and not lesson.homework.is_deleted:
+        logger.error(
+            "Homework creation conflict detected for lesson.",
+            extra={"lesson_id": lesson_id, "teacher_id": teacher_id},
+        )
         raise ValueError("Lesson already has homework")
 
     normalized_deadline = (
@@ -158,6 +199,10 @@ async def create_homework(
     lesson.homework = homework
     await db.commit()
     await db.refresh(homework)
+    logger.info(
+        "Homework created in database.",
+        extra={"lesson_id": lesson_id, "homework_id": homework.id},
+    )
 
     return homework
 
@@ -171,6 +216,15 @@ async def update_homework(
     **update_data,
 ) -> HomeworkDAO | None:
     """Update a homework found by id and optional ownership filters."""
+    logger.info(
+        "Updating homework in database.",
+        extra={
+            "homework_id": homework_id,
+            "teacher_id": teacher_id,
+            "student_id": student_id,
+            "fields": sorted(update_data.keys()),
+        },
+    )
     homework = await get_homework(
         db,
         homework_id=homework_id,
@@ -180,6 +234,10 @@ async def update_homework(
     )
 
     if homework is None:
+        logger.info(
+            "Homework update target was not found in database.",
+            extra={"homework_id": homework_id},
+        )
         return None
 
     normalized_update_data = dict(update_data)
@@ -197,6 +255,10 @@ async def update_homework(
 
     await db.commit()
     await db.refresh(homework)
+    logger.info(
+        "Homework updated in database.",
+        extra={"homework_id": homework.id},
+    )
 
     return homework
 
@@ -208,6 +270,10 @@ async def soft_delete_homework(
     teacher_id: str,
 ) -> HomeworkDAO | None:
     """Soft-delete homework and unlink it from the lesson."""
+    logger.info(
+        "Soft deleting homework in database.",
+        extra={"homework_id": homework_id, "teacher_id": teacher_id},
+    )
     homework = await get_homework(
         db,
         homework_id=homework_id,
@@ -216,6 +282,10 @@ async def soft_delete_homework(
     )
 
     if homework is None:
+        logger.info(
+            "Homework deletion target was not found in database.",
+            extra={"homework_id": homework_id, "teacher_id": teacher_id},
+        )
         return None
 
     homework.is_deleted = True
@@ -224,5 +294,9 @@ async def soft_delete_homework(
         homework.lesson.homework_id = None
 
     await db.commit()
+    logger.info(
+        "Homework soft deleted in database.",
+        extra={"homework_id": homework.id, "teacher_id": teacher_id},
+    )
 
     return homework

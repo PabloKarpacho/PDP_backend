@@ -31,7 +31,19 @@ class Settings(BaseSettings):
     GRAYLOG_PORT: int = 12201
 
     # DATABASE
+    DATABASE_BACKEND: Literal["local", "aws"] = "local"
     POSTGRESQL_DSN: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/pdp"
+    AWS_POSTGRES_REGION: str = "eu-north-1"
+    AWS_POSTGRES_HOST: str = "database-1.cxgewygq0xq3.eu-north-1.rds.amazonaws.com"
+    AWS_POSTGRES_PORT: int = 5432
+    AWS_POSTGRES_DB: str = "postgres"
+    AWS_POSTGRES_USER: str = "postgres"
+    AWS_POSTGRES_SECRET_ARN: str = (
+        "arn:aws:secretsmanager:eu-north-1:406881348631:"
+        "secret:rds!db-2278daca-e94b-45f5-b0ed-08d8ce96fa9f-jDlVkq"
+    )
+    AWS_POSTGRES_SSL_MODE: str = "disable"
+    AWS_POSTGRES_SSL_ROOT_CERT: str = ""
 
     # AUTH
     SECRET_KEY: str = "gV64m9aIzFG4qpgVphvQbPQrtAO0nM-7YwwOvu0XPt5KJOjAy4AfgLkqJXYEt"
@@ -106,6 +118,46 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_storage_settings(self) -> "Settings":
+        if self.DATABASE_BACKEND == "aws":
+            if not self.AWS_POSTGRES_REGION.strip():
+                raise ValueError(
+                    "AWS_POSTGRES_REGION must not be empty for aws database backend"
+                )
+
+            if not self.AWS_POSTGRES_HOST.strip():
+                raise ValueError(
+                    "AWS_POSTGRES_HOST must not be empty for aws database backend"
+                )
+
+            if not self.AWS_POSTGRES_DB.strip():
+                raise ValueError(
+                    "AWS_POSTGRES_DB must not be empty for aws database backend"
+                )
+
+            if not self.AWS_POSTGRES_USER.strip():
+                raise ValueError(
+                    "AWS_POSTGRES_USER must not be empty for aws database backend"
+                )
+
+            if not self.AWS_POSTGRES_SECRET_ARN.strip():
+                raise ValueError(
+                    "AWS_POSTGRES_SECRET_ARN must not be empty for aws database backend"
+                )
+
+            if not self.AWS_POSTGRES_SSL_MODE.strip():
+                raise ValueError(
+                    "AWS_POSTGRES_SSL_MODE must not be empty for aws database backend"
+                )
+
+            if (
+                self.AWS_POSTGRES_SSL_MODE.strip().lower()
+                in {"verify-ca", "verify-full"}
+                and not self.AWS_POSTGRES_SSL_ROOT_CERT.strip()
+            ):
+                raise ValueError(
+                    "AWS_POSTGRES_SSL_ROOT_CERT must not be empty for verify-ca/verify-full"
+                )
+
         if not self.FILES_BUCKET_NAME.strip():
             raise ValueError("FILES_BUCKET_NAME must not be empty")
 

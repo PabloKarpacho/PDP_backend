@@ -39,7 +39,15 @@ async def ensure_minio_bucket_ready(
 
 
 async def run_startup_tasks() -> None:
-    await ensure_minio_bucket_ready(CONFIG.MINIO_FILES_BUCKET_NAME)
+    if CONFIG.STORAGE_BACKEND != "minio":
+        logger.info(
+            "Skipping storage bucket bootstrap for non-MinIO backend.",
+            extra={"storage_backend": CONFIG.STORAGE_BACKEND},
+        )
+        logger.dump()
+        return
+
+    await ensure_minio_bucket_ready(CONFIG.FILES_BUCKET_NAME)
 
 
 def create_lifespan(startup_runner: StartupRunner = run_startup_tasks):

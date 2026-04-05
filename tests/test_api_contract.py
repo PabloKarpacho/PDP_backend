@@ -144,7 +144,7 @@ def test_files_upload_endpoint_uses_success_envelope(client: TestClient, monkeyp
     assert response.json()["data"] == {
         "url": "https://example.com/file",
         "key": response.json()["data"]["key"],
-        "bucket_name": "pdp-files",
+        "bucket_name": files_router_module.CONFIG.FILES_BUCKET_NAME,
         "original_filename": "lesson.txt",
         "content_type": "text/plain",
         "size": 7,

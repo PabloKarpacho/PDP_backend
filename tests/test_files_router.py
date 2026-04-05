@@ -17,7 +17,7 @@ class FakeS3Client:
         self.response = response or {
             "url": "https://example.com/file",
             "key": "uploads/2026/04/05/test-file.txt",
-            "bucket_name": CONFIG.MINIO_FILES_BUCKET_NAME,
+            "bucket_name": CONFIG.FILES_BUCKET_NAME,
             "content_type": "text/plain",
             "size": 7,
             "original_filename": "lesson.txt",
@@ -86,7 +86,7 @@ async def test_upload_file_returns_structured_file_metadata(monkeypatch):
     assert result.meta.pagination is None
     assert result.data.url == "https://example.com/file"
     assert result.data.key == "safe/key.txt"
-    assert result.data.bucket_name == CONFIG.MINIO_FILES_BUCKET_NAME
+    assert result.data.bucket_name == CONFIG.FILES_BUCKET_NAME
     assert result.data.original_filename == "lesson.txt"
     assert result.data.content_type == "text/plain"
     assert result.data.size == 7
@@ -94,7 +94,7 @@ async def test_upload_file_returns_structured_file_metadata(monkeypatch):
         {
             "data": b"payload",
             "key": "safe/key.txt",
-            "bucket_name": CONFIG.MINIO_FILES_BUCKET_NAME,
+            "bucket_name": CONFIG.FILES_BUCKET_NAME,
             "content_type": "text/plain",
             "metadata": {"original_filename": "lesson.txt"},
         }

@@ -1,5 +1,8 @@
+from typing import Literal
+
 from pydantic import AliasChoices
 from pydantic import Field
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 from pydantic_settings import SettingsConfigDict
 from dotenv import find_dotenv
@@ -51,10 +54,18 @@ class Settings(BaseSettings):
     }
 
     # FILES
+    STORAGE_BACKEND: Literal["minio", "aws"] = "minio"
+    FILES_BUCKET_NAME: str = Field(
+        default="pdp-files",
+        validation_alias=AliasChoices("FILES_BUCKET_NAME", "MINIO_FILES_BUCKET_NAME"),
+    )
+    STORAGE_REGION: str = Field(
+        default="us-east-1",
+        validation_alias=AliasChoices("STORAGE_REGION", "AWS_REGION"),
+    )
     MINIO_ENDPOINT: str = "localhost:9000"
     MINIO_ROOT_USER: str = "ROOTNAME"
     MINIO_ROOT_PASSWORD: str = "CHANGEME123"
-    MINIO_FILES_BUCKET_NAME: str = "pdp-files"
     MINIO_SECURE: bool = False
     FILE_UPLOAD_MAX_BYTES: int = 10 * 1024 * 1024
     FILE_UPLOAD_ALLOWED_CONTENT_TYPES: tuple[str, ...] = (
@@ -92,6 +103,28 @@ class Settings(BaseSettings):
         ),
     )
     KEYCLOAK_ENABLE: bool = True
+
+    @model_validator(mode="after")
+    def validate_storage_settings(self) -> "Settings":
+        if not self.FILES_BUCKET_NAME.strip():
+            raise ValueError("FILES_BUCKET_NAME must not be empty")
+
+        if not self.STORAGE_REGION.strip():
+            raise ValueError("STORAGE_REGION must not be empty")
+
+        if self.STORAGE_BACKEND != "minio":
+            return self
+
+        if not self.MINIO_ENDPOINT.strip():
+            raise ValueError("MINIO_ENDPOINT must not be empty for minio backend")
+
+        if not self.MINIO_ROOT_USER.strip():
+            raise ValueError("MINIO_ROOT_USER must not be empty for minio backend")
+
+        if not self.MINIO_ROOT_PASSWORD.strip():
+            raise ValueError("MINIO_ROOT_PASSWORD must not be empty for minio backend")
+
+        return self
 
 
 CONFIG = Settings()

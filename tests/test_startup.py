@@ -95,3 +95,47 @@ async def test_lifespan_propagates_startup_failure() -> None:
     with pytest.raises(RuntimeError, match="startup failed"):
         async with app.router.lifespan_context(app):
             pass
+
+
+@pytest.mark.asyncio
+async def test_run_startup_tasks_bootstraps_bucket_for_minio_backend(
+    monkeypatch,
+) -> None:
+    observed_buckets: list[str] = []
+
+    async def fake_ensure_minio_bucket_ready(bucket_name: str) -> None:
+        observed_buckets.append(bucket_name)
+
+    monkeypatch.setattr(startup_module.CONFIG, "STORAGE_BACKEND", "minio")
+    monkeypatch.setattr(startup_module.CONFIG, "FILES_BUCKET_NAME", "pdp-files")
+    monkeypatch.setattr(
+        startup_module,
+        "ensure_minio_bucket_ready",
+        fake_ensure_minio_bucket_ready,
+    )
+
+    await startup_module.run_startup_tasks()
+
+    assert observed_buckets == ["pdp-files"]
+
+
+@pytest.mark.asyncio
+async def test_run_startup_tasks_skips_bucket_bootstrap_for_aws_backend(
+    monkeypatch,
+) -> None:
+    bootstrapped = False
+
+    async def fake_ensure_minio_bucket_ready(bucket_name: str) -> None:
+        nonlocal bootstrapped
+        bootstrapped = True
+
+    monkeypatch.setattr(startup_module.CONFIG, "STORAGE_BACKEND", "aws")
+    monkeypatch.setattr(
+        startup_module,
+        "ensure_minio_bucket_ready",
+        fake_ensure_minio_bucket_ready,
+    )
+
+    await startup_module.run_startup_tasks()
+
+    assert bootstrapped is False

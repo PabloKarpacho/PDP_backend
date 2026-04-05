@@ -61,7 +61,7 @@ async def upload_file(file: UploadFile) -> ResponseEnvelope[FileUploadSchema]:
         stored_object = await s3_client.upload_bytes(
             data=file_content,
             key=object_key,
-            bucket_name=CONFIG.MINIO_FILES_BUCKET_NAME,
+            bucket_name=CONFIG.FILES_BUCKET_NAME,
             content_type=content_type,
             metadata={"original_filename": safe_filename},
         )

@@ -7,6 +7,7 @@ import unicodedata
 import uuid
 
 import aioboto3
+from aiobotocore.config import AioConfig
 from loguru import logger
 
 from src.config import CONFIG
@@ -84,23 +85,34 @@ def build_storage_object_key(
 class S3:
     def __init__(
         self,
-        s3_access_key_id: str,
-        s3_secret_access_key: str,
-        endpoint_url: str,
+        *,
         region_name: str = "us-east-1",
+        endpoint_url: str | None = None,
+        s3_access_key_id: str | None = None,
+        s3_secret_access_key: str | None = None,
+        client_config: AioConfig | None = None,
     ) -> None:
         self.endpoint_url = endpoint_url
-        self._session = aioboto3.Session(
-            aws_access_key_id=s3_access_key_id,
-            aws_secret_access_key=s3_secret_access_key,
-            region_name=region_name,
-        )
+        self._client_config = client_config
+
+        session_kwargs = {"region_name": region_name}
+        if s3_access_key_id is not None:
+            session_kwargs["aws_access_key_id"] = s3_access_key_id
+        if s3_secret_access_key is not None:
+            session_kwargs["aws_secret_access_key"] = s3_secret_access_key
+
+        self._session = aioboto3.Session(**session_kwargs)
+
+    def _client_kwargs(self) -> dict[str, str | AioConfig]:
+        client_kwargs: dict[str, str | AioConfig] = {}
+        if self.endpoint_url is not None:
+            client_kwargs["endpoint_url"] = self.endpoint_url
+        if self._client_config is not None:
+            client_kwargs["config"] = self._client_config
+        return client_kwargs
 
     async def create_bucket(self, bucket_name: str) -> None:
-        async with self._session.client(
-            "s3",
-            endpoint_url=self.endpoint_url,
-        ) as s3:
+        async with self._session.client("s3", **self._client_kwargs()) as s3:
             existing_buckets = await s3.list_buckets()
             bucket_names = [b["Name"] for b in existing_buckets.get("Buckets", [])]
 
@@ -115,10 +127,7 @@ class S3:
         bucket_name: str,
         rules: list[dict],
     ) -> None:
-        async with self._session.client(
-            "s3",
-            endpoint_url=self.endpoint_url,
-        ) as s3:
+        async with self._session.client("s3", **self._client_kwargs()) as s3:
             existing_buckets = await s3.list_buckets()
             bucket_names = [b["Name"] for b in existing_buckets.get("Buckets", [])]
 
@@ -138,10 +147,7 @@ class S3:
         url_expiry: int = 3600,
         file_id: str | None = None,
     ) -> str:
-        async with self._session.client(
-            "s3",
-            endpoint_url=self.endpoint_url,
-        ) as s3:
+        async with self._session.client("s3", **self._client_kwargs()) as s3:
             logger.info(
                 "Uploading file to S3: bucket={bucket_name}, key={key}, file_id={file_id}".format(
                     bucket_name=bucket_name,
@@ -191,10 +197,7 @@ class S3:
         content_type: str | None = None,
         metadata: dict[str, str] | None = None,
     ) -> StoredObject:
-        async with self._session.client(
-            "s3",
-            endpoint_url=self.endpoint_url,
-        ) as s3:
+        async with self._session.client("s3", **self._client_kwargs()) as s3:
             extra_args = {}
             if content_type:
                 extra_args["ContentType"] = content_type
@@ -232,10 +235,7 @@ class S3:
         key: str,
         bucket_name: str,
     ) -> None:
-        async with self._session.client(
-            "s3",
-            endpoint_url=self.endpoint_url,
-        ) as s3:
+        async with self._session.client("s3", **self._client_kwargs()) as s3:
             logger.info(
                 "Deleting file from S3: bucket={bucket_name}, key={key}".format(
                     bucket_name=bucket_name,
@@ -267,10 +267,7 @@ class S3:
         bucket_name: str,
         url_expiry: int = 3600,
     ) -> str:
-        async with self._session.client(
-            "s3",
-            endpoint_url=self.endpoint_url,
-        ) as s3:
+        async with self._session.client("s3", **self._client_kwargs()) as s3:
             try:
                 return await s3.generate_presigned_url(
                     ClientMethod="get_object",
@@ -288,10 +285,7 @@ class S3:
         key: str,
         bucket_name: str,
     ) -> tuple[bytes, str | None]:
-        async with self._session.client(
-            "s3",
-            endpoint_url=self.endpoint_url,
-        ) as s3:
+        async with self._session.client("s3", **self._client_kwargs()) as s3:
             logger.info(
                 "Downloading file from S3: bucket={bucket_name}, key={key}".format(
                     bucket_name=bucket_name,
@@ -312,14 +306,20 @@ class S3:
 
 
 def get_s3_client() -> S3:
+    if CONFIG.STORAGE_BACKEND == "aws":
+        return S3(region_name=CONFIG.STORAGE_REGION)
+
     endpoint_url = CONFIG.MINIO_ENDPOINT
     if not endpoint_url.startswith(("http://", "https://")):
-        endpoint_url = f"http://{endpoint_url}"
+        scheme = "https" if CONFIG.MINIO_SECURE else "http"
+        endpoint_url = f"{scheme}://{endpoint_url}"
 
     return S3(
+        region_name=CONFIG.STORAGE_REGION,
         s3_access_key_id=CONFIG.MINIO_ROOT_USER,
         s3_secret_access_key=CONFIG.MINIO_ROOT_PASSWORD,
         endpoint_url=endpoint_url,
+        client_config=AioConfig(s3={"addressing_style": "path"}),
     )
 
 

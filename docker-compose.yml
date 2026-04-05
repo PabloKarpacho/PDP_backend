@@ -71,6 +71,3 @@ networks:
   pdp-network:
     name: pdp-network
     driver: bridge
-
-volumes:
-  postgres-init:

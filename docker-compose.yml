@@ -11,10 +11,6 @@ services:
       - "${APP_PORT}:${APP_PORT}"
     env_file:
       - ".env"
-    depends_on:
-      - pdp-db
-      - pdp-minio
-      - pdp-keycloak
     environment:
       POSTGRESQL_DSN: ${DOCKER_POSTGRESQL_DSN}
       MINIO_ENDPOINT: ${DOCKER_MINIO_ENDPOINT}
@@ -56,8 +52,6 @@ services:
       - "${KEYCLOAK_PORT}:8080"
     env_file:
       - ".env"
-    depends_on:
-      - pdp-db
     networks:
       - pdp-network
     volumes:

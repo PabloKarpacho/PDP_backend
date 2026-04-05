@@ -39,6 +39,10 @@ def _prepare_fake_bin(tmp_path: Path, docker_up_mode: str) -> Path:
         bin_dir / "docker",
         f"""#!/usr/bin/env bash
         echo "$*" >> "$TEST_STATE_DIR/docker.log"
+        if [ "$1 $2 $3 $4" = "compose run --rm --no-deps" ]; then
+          echo "aws-secret-password"
+          exit 0
+        fi
         if [ "$1 $2 $3 $4" = "compose up -d --force-recreate" ] && [ "{docker_up_mode}" = "fail-backend-start" ]; then
           exit 1
         fi
@@ -52,18 +56,6 @@ def _prepare_fake_bin(tmp_path: Path, docker_up_mode: str) -> Path:
         exit 0
         """,
     )
-    _write_executable(
-        bin_dir / "uv",
-        """#!/usr/bin/env bash
-        echo "$*" >> "$TEST_STATE_DIR/uv.log"
-        if [ "$1 $2 $3 $4" = "run python -m src.services.keycloak_secret" ]; then
-          echo "aws-secret-password"
-          exit 0
-        fi
-        exit 0
-        """,
-    )
-
     return bin_dir
 
 
@@ -132,11 +124,13 @@ def test_deploy_backend_resolves_keycloak_password_from_aws_secret(
             "KC_DB_AWS_SECRET_ID=secret-id\n"
         ),
     )
-    uv_log = (tmp_path / "state" / "uv.log").read_text()
+    docker_log = (tmp_path / "state" / "docker.log").read_text()
 
     assert result.returncode == 0
     assert (
         "==> Resolving Keycloak database password from AWS Secrets Manager"
         in result.stdout
     )
-    assert "run python -m src.services.keycloak_secret" in uv_log
+    assert "compose build pdp-backend" in docker_log
+    assert "compose run --rm --no-deps" in docker_log
+    assert "uv run python -m src.services.keycloak_secret" in docker_log

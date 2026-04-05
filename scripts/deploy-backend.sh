@@ -20,10 +20,12 @@ resolve_keycloak_db_password() {
 
   echo "==> Resolving Keycloak database password from AWS Secrets Manager"
   KC_DB_PASSWORD="$(
-    KC_DB_PASSWORD="${KC_DB_PASSWORD:-}" \
-    KC_DB_AWS_SECRET_ID="$secret_id" \
-    KC_DB_AWS_REGION="$region" \
-    uv run python -m src.services.keycloak_secret
+    docker compose run --rm --no-deps \
+      -e KC_DB_PASSWORD="${KC_DB_PASSWORD:-}" \
+      -e KC_DB_AWS_SECRET_ID="$secret_id" \
+      -e KC_DB_AWS_REGION="$region" \
+      "$BACKEND_SERVICE" \
+      uv run python -m src.services.keycloak_secret
   )"
   export KC_DB_PASSWORD
 }
@@ -57,9 +59,10 @@ set -a
 source ./.env
 set +a
 
-resolve_keycloak_db_password
 echo "==> Building backend image"
 docker compose build "$BACKEND_SERVICE"
+
+resolve_keycloak_db_password
 
 echo "==> Starting dependencies"
 docker compose up -d pdp-db pdp-minio pdp-keycloak

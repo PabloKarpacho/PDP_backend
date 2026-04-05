@@ -57,11 +57,14 @@ async def get_user_info(payload: dict = Depends(get_payload)) -> KeycloakUser:
     try:
         logger.info(f"Payload: {payload}")
         realm_roles = payload.get("realm_access", {}).get("roles", [])
+        if not realm_roles and payload.get("role") is not None:
+            realm_roles = [payload.get("role")]
+
         return KeycloakUser(
             id=payload.get("sub"),
             username=payload.get("preferred_username") or payload.get("name"),
             email=payload.get("email"),
-            first_name=payload.get("given_name"),
+            first_name=payload.get("given_name") or payload.get("name"),
             last_name=payload.get("family_name") or payload.get("last_name"),
             phone=payload.get("phone"),
             realm_roles=realm_roles,

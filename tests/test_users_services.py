@@ -126,3 +126,41 @@ async def test_get_or_create_user_from_keycloak_creates_missing_user(monkeypatch
     )
 
     assert result is created_user
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_user_from_keycloak_prefers_first_name_for_user_name(
+    monkeypatch,
+):
+    created_user = build_user_dao(id="user-3", email="display@example.com")
+
+    async def fake_get_user(db, *, user_id):
+        return None
+
+    async def fake_create_user(db, **payload):
+        assert payload == {
+            "user_id": "user-3",
+            "name": "Pavel",
+            "surname": "Karpov",
+            "email": "display@example.com",
+            "role": Roles.TEACHER,
+        }
+        return created_user
+
+    monkeypatch.setattr(users_service, "get_user_record", fake_get_user)
+    monkeypatch.setattr(users_service, "create_user_record", fake_create_user)
+
+    result = await users_service.get_or_create_user_from_keycloak(
+        db=FakeAsyncSession(),
+        keycloak_user=build_keycloak_user(
+            id="user-3",
+            username="karpoffpasha@yandex.ru",
+            first_name="Pavel",
+            last_name="Karpov",
+            email="display@example.com",
+            role=Roles.TEACHER,
+            realm_roles=[Roles.TEACHER],
+        ),
+    )
+
+    assert result is created_user

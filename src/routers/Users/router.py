@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 
 from src.dependencies import get_user
+from src.logger import logger
 from src.models import UserDAO
 from src.routers.Users.schemas import UserGetSchema
 from src.schemas import ResponseEnvelope, success_response
@@ -16,4 +17,8 @@ router = APIRouter(prefix=PREFIX, tags=["Users"])
 async def get_current_user(
     user: UserDAO = Depends(get_user),
 ) -> ResponseEnvelope[UserGetSchema]:
+    logger.info(
+        f"Запрошен профиль текущего пользователя {user.id}",
+        extra={"user_id": str(user.id)},
+    )
     return success_response(get_current_user_profile(user))

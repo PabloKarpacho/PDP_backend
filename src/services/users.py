@@ -15,6 +15,10 @@ def get_current_user_profile(user: UserDAO) -> UserGetSchema:
     return serialize_user(user)
 
 
+def _resolve_user_name(keycloak_user: KeycloakUser) -> str | None:
+    return keycloak_user.first_name or keycloak_user.username
+
+
 async def get_or_create_user_from_keycloak(
     db: AsyncSession,
     *,
@@ -26,7 +30,7 @@ async def get_or_create_user_from_keycloak(
 
     if user is not None:
         if (
-            user.name != keycloak_user.username
+            user.name != _resolve_user_name(keycloak_user)
             or user.surname != keycloak_user.last_name
             or user.email != keycloak_user.email
             or user.role != keycloak_user.role
@@ -34,7 +38,7 @@ async def get_or_create_user_from_keycloak(
             return await update_user_record(
                 db,
                 user=user,
-                name=keycloak_user.username,
+                name=_resolve_user_name(keycloak_user),
                 surname=keycloak_user.last_name,
                 email=keycloak_user.email,
                 role=keycloak_user.role,
@@ -44,7 +48,7 @@ async def get_or_create_user_from_keycloak(
     user = await create_user_record(
         db,
         user_id=keycloak_user.id,
-        name=keycloak_user.username,
+        name=_resolve_user_name(keycloak_user),
         surname=keycloak_user.last_name,
         email=keycloak_user.email,
         role=keycloak_user.role,

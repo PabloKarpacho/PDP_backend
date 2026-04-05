@@ -51,3 +51,24 @@ async def test_get_user_info_sets_role_to_none_when_realm_roles_have_no_supporte
 
     assert user.role is None
     assert user.realm_roles == []
+
+
+@pytest.mark.asyncio
+async def test_get_user_info_uses_top_level_role_when_realm_roles_are_missing():
+    user = await get_user_info(
+        payload={
+            "sub": "user-1",
+            "name": "Pavel Karpov",
+            "preferred_username": "karpoffpasha@yandex.ru",
+            "given_name": "Pavel",
+            "family_name": "Karpov",
+            "email": "karpoffpasha@yandex.ru",
+            "role": Roles.TEACHER,
+        }
+    )
+
+    assert user.username == "karpoffpasha@yandex.ru"
+    assert user.first_name == "Pavel"
+    assert user.last_name == "Karpov"
+    assert user.role == Roles.TEACHER
+    assert user.realm_roles == [Roles.TEACHER]

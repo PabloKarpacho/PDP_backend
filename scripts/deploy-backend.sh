@@ -65,7 +65,7 @@ docker compose build "$BACKEND_SERVICE"
 resolve_keycloak_db_password
 
 echo "==> Starting dependencies"
-docker compose up -d pdp-db pdp-minio pdp-keycloak
+docker compose up -d pdp-keycloak
 
 echo "==> Applying database migrations"
 docker compose run --rm "$BACKEND_SERVICE" uv run python -m alembic upgrade head

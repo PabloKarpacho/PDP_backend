@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from src.database_control.postgres.alembic_config import escape_alembic_config_value
 from src.config import CONFIG
 
 
@@ -211,7 +212,7 @@ def build_alembic_config(database_dsn: str | None = None) -> AlembicConfig:
     )
     alembic_config.set_main_option(
         "sqlalchemy.url",
-        resolved_dsn,
+        escape_alembic_config_value(resolved_dsn),
     )
     return alembic_config
 

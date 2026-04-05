@@ -4,7 +4,10 @@ from alembic import context
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
-from src.database_control.postgres.alembic_config import resolve_alembic_database_url
+from src.database_control.postgres.alembic_config import (
+    escape_alembic_config_value,
+    resolve_alembic_database_url,
+)
 from src.models import Base
 
 
@@ -35,7 +38,10 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    config.set_main_option("sqlalchemy.url", _get_database_url())
+    config.set_main_option(
+        "sqlalchemy.url",
+        escape_alembic_config_value(_get_database_url()),
+    )
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",

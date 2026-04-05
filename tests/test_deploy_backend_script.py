@@ -22,7 +22,7 @@ def _prepare_fake_app_dir(tmp_path: Path) -> Path:
     return app_dir
 
 
-def _prepare_fake_bin(tmp_path: Path, curl_mode: str) -> Path:
+def _prepare_fake_bin(tmp_path: Path, docker_up_mode: str) -> Path:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     state_dir = tmp_path / "state"
@@ -37,8 +37,11 @@ def _prepare_fake_bin(tmp_path: Path, curl_mode: str) -> Path:
     )
     _write_executable(
         bin_dir / "docker",
-        """#!/usr/bin/env bash
+        f"""#!/usr/bin/env bash
         echo "$*" >> "$TEST_STATE_DIR/docker.log"
+        if [ "$1 $2 $3 $4" = "compose up -d --force-recreate" ] && [ "{docker_up_mode}" = "fail-backend-start" ]; then
+          exit 1
+        fi
         exit 0
         """,
     )
@@ -50,50 +53,19 @@ def _prepare_fake_bin(tmp_path: Path, curl_mode: str) -> Path:
         """,
     )
 
-    if curl_mode == "eventual-success":
-        curl_body = """
-        count_file="$TEST_STATE_DIR/curl-count"
-        count=0
-        if [ -f "$count_file" ]; then
-          count="$(cat "$count_file")"
-        fi
-        count="$((count + 1))"
-        printf '%s' "$count" > "$count_file"
-        if [ "$count" -lt 3 ]; then
-          echo "curl: (56) Recv failure: Connection reset by peer" >&2
-          exit 56
-        fi
-        exit 0
-        """
-    else:
-        curl_body = """
-        echo "curl: (56) Recv failure: Connection reset by peer" >&2
-        exit 56
-        """
-
-    _write_executable(
-        bin_dir / "curl",
-        f"""#!/usr/bin/env bash
-        {textwrap.dedent(curl_body).strip()}
-        """,
-    )
-
     return bin_dir
 
 
 def _run_script(
-    tmp_path: Path, curl_mode: str, readiness_attempts: int = 4
+    tmp_path: Path, docker_up_mode: str = "success"
 ) -> subprocess.CompletedProcess[str]:
     app_dir = _prepare_fake_app_dir(tmp_path)
-    bin_dir = _prepare_fake_bin(tmp_path, curl_mode=curl_mode)
+    bin_dir = _prepare_fake_bin(tmp_path, docker_up_mode=docker_up_mode)
     env = os.environ.copy()
     env.update(
         {
             "APP_DIR": str(app_dir),
             "BRANCH": "main",
-            "READINESS_ATTEMPTS": str(readiness_attempts),
-            "READINESS_INTERVAL_SECONDS": "1",
-            "READINESS_TIMEOUT_SECONDS": "1",
             "TEST_STATE_DIR": str(tmp_path / "state"),
             "PATH": f"{bin_dir}:{env['PATH']}",
         }
@@ -108,32 +80,28 @@ def _run_script(
     )
 
 
-def test_deploy_backend_waits_for_readiness_without_leaking_curl_errors(
+def test_deploy_backend_recreates_backend_container_without_readiness_probe(
     tmp_path: Path,
 ) -> None:
-    result = _run_script(tmp_path, curl_mode="eventual-success")
+    result = _run_script(tmp_path)
+    docker_log = (tmp_path / "state" / "docker.log").read_text()
 
     assert result.returncode == 0
-    assert (
-        "==> Waiting for readiness at http://localhost:8001/actuator/health/readiness"
-        in result.stdout
-    )
-    assert "Readiness probe failed (attempt 1/4), retrying in 1s" in result.stdout
-    assert "Readiness probe failed (attempt 2/4), retrying in 1s" in result.stdout
-    assert "Backend is ready" in result.stdout
-    assert "Recv failure: Connection reset by peer" not in result.stdout
+    assert "==> Removing previous backend container" in result.stdout
+    assert "==> Starting backend" in result.stdout
+    assert "Waiting for readiness" not in result.stdout
+    assert "compose rm -fsv pdp-backend" in docker_log
+    assert "compose up -d --force-recreate pdp-backend" in docker_log
     assert result.stderr == ""
 
 
-def test_deploy_backend_reports_readiness_timeout_cleanly(tmp_path: Path) -> None:
-    result = _run_script(tmp_path, curl_mode="always-fail", readiness_attempts=2)
+def test_deploy_backend_reports_backend_start_failure_cleanly(tmp_path: Path) -> None:
+    result = _run_script(tmp_path, docker_up_mode="fail-backend-start")
+    docker_log = (tmp_path / "state" / "docker.log").read_text()
 
     assert result.returncode == 1
-    assert "Readiness probe failed (attempt 1/2), retrying in 1s" in result.stdout
-    assert "Readiness probe failed (attempt 2/2)" in result.stdout
-    assert (
-        "Backend failed readiness check: http://localhost:8001/actuator/health/readiness"
-        in result.stdout
-    )
-    assert "Recv failure: Connection reset by peer" not in result.stdout
+    assert "==> Backend container status" in result.stdout
+    assert "==> Recent backend logs" in result.stdout
+    assert "Backend container failed to start" in result.stdout
+    assert "compose up -d --force-recreate pdp-backend" in docker_log
     assert result.stderr == ""

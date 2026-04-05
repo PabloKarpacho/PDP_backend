@@ -8,16 +8,29 @@ import uuid
 
 import aioboto3
 from aiobotocore.config import AioConfig
+from botocore.exceptions import NoCredentialsError
 from loguru import logger
 
 from src.config import CONFIG
 
 
 _FILENAME_SAFE_CHARS_PATTERN = re.compile(r"[^a-z0-9]+")
+_AWS_NO_CREDENTIALS_MESSAGE = (
+    "AWS credentials are not available for S3 operations. If the backend runs in "
+    "Docker on EC2, attach an IAM role to the instance and ensure EC2 Instance "
+    "Metadata is enabled and reachable from the container. For IMDSv2 in Docker, "
+    "set HttpPutResponseHopLimit to at least 2."
+)
 
 
 class StorageError(Exception):
     """Raised when S3-compatible storage operations fail."""
+
+
+def _translate_storage_error(error: Exception, fallback_message: str) -> StorageError:
+    if isinstance(error, NoCredentialsError):
+        return StorageError(_AWS_NO_CREDENTIALS_MESSAGE)
+    return StorageError(fallback_message)
 
 
 @dataclass(frozen=True)
@@ -186,7 +199,10 @@ class S3:
             except StorageError:
                 raise
             except Exception as error:
-                raise StorageError("Failed to upload file to storage") from error
+                raise _translate_storage_error(
+                    error,
+                    "Failed to upload file to storage",
+                ) from error
 
     async def upload_bytes(
         self,
@@ -220,7 +236,10 @@ class S3:
             except StorageError:
                 raise
             except Exception as error:
-                raise StorageError("Failed to upload file bytes to storage") from error
+                raise _translate_storage_error(
+                    error,
+                    "Failed to upload file bytes to storage",
+                ) from error
 
         return StoredObject(
             bucket_name=bucket_name,
@@ -251,7 +270,10 @@ class S3:
             except StorageError:
                 raise
             except Exception as error:
-                raise StorageError("Failed to delete file from storage") from error
+                raise _translate_storage_error(
+                    error,
+                    "Failed to delete file from storage",
+                ) from error
 
             logger.info(
                 "File deleted from S3: bucket={bucket_name}, key={key}".format(
@@ -277,7 +299,10 @@ class S3:
             except StorageError:
                 raise
             except Exception as error:
-                raise StorageError("Failed to generate download URL") from error
+                raise _translate_storage_error(
+                    error,
+                    "Failed to generate download URL",
+                ) from error
 
     async def download_bytes(
         self,
@@ -301,7 +326,10 @@ class S3:
             except StorageError:
                 raise
             except Exception as error:
-                raise StorageError("Failed to download file from storage") from error
+                raise _translate_storage_error(
+                    error,
+                    "Failed to download file from storage",
+                ) from error
             return body, response.get("ContentType")
 
 

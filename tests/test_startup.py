@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from botocore.exceptions import NoCredentialsError
 import pytest
 
 from src import startup as startup_module
@@ -123,11 +124,14 @@ async def test_run_startup_tasks_bootstraps_bucket_for_minio_backend(
 async def test_run_startup_tasks_skips_bucket_bootstrap_for_aws_backend(
     monkeypatch,
 ) -> None:
-    bootstrapped = False
+    validated = False
 
     async def fake_ensure_minio_bucket_ready(bucket_name: str) -> None:
-        nonlocal bootstrapped
-        bootstrapped = True
+        raise AssertionError("MinIO bootstrap should not run for AWS backend")
+
+    async def fake_ensure_aws_credentials_ready() -> None:
+        nonlocal validated
+        validated = True
 
     monkeypatch.setattr(startup_module.CONFIG, "STORAGE_BACKEND", "aws")
     monkeypatch.setattr(
@@ -135,7 +139,42 @@ async def test_run_startup_tasks_skips_bucket_bootstrap_for_aws_backend(
         "ensure_minio_bucket_ready",
         fake_ensure_minio_bucket_ready,
     )
+    monkeypatch.setattr(
+        startup_module,
+        "ensure_aws_credentials_ready",
+        fake_ensure_aws_credentials_ready,
+    )
 
     await startup_module.run_startup_tasks()
 
-    assert bootstrapped is False
+    assert validated is True
+
+
+@pytest.mark.asyncio
+async def test_ensure_aws_credentials_ready_raises_clear_error(monkeypatch) -> None:
+    fake_logger = FakeLogger()
+
+    class FakeStsClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get_caller_identity(self):
+            raise NoCredentialsError()
+
+    class FakeSession:
+        def __init__(self, **kwargs) -> None:
+            self.kwargs = kwargs
+
+        def client(self, service_name: str):
+            assert service_name == "sts"
+            return FakeStsClient()
+
+    monkeypatch.setattr(startup_module, "logger", fake_logger)
+    monkeypatch.setattr(startup_module.aioboto3, "Session", FakeSession)
+    monkeypatch.setattr(startup_module.CONFIG, "STORAGE_REGION", "eu-north-1")
+
+    with pytest.raises(RuntimeError, match="AWS credentials are not available"):
+        await startup_module.ensure_aws_credentials_ready()

@@ -44,7 +44,19 @@ async def get_lessons(
     start_time: datetime.datetime | None = None,
     end_time: datetime.datetime | None = None,
 ) -> ResponseEnvelope[list[LessonGetSchema]]:
-    """List lessons for the current teacher or student, optionally filtered by time."""
+    """
+    List lessons visible to the current authenticated user.
+
+    Parameters:
+    user (UserDAO): The current authenticated application user.
+    db (AsyncSession): Active database session.
+    start_time (datetime.datetime | None): Optional lower bound for lesson start time.
+    end_time (datetime.datetime | None): Optional upper bound for lesson end time.
+
+    Returns:
+    ResponseEnvelope[list[LessonGetSchema]]: Lessons available to the current
+    teacher or student, optionally filtered by the requested time window.
+    """
     logger.info(
         "Lessons list requested.",
         extra={
@@ -79,7 +91,18 @@ async def create_lesson(
     user: UserDAO = Depends(get_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> ResponseEnvelope[LessonGetSchema]:
-    """Create one scheduled lesson owned by the current teacher."""
+    """
+    Create a lesson for the current authenticated teacher.
+
+    Parameters:
+    lesson (LessonCreateSchema): Input payload describing the lesson to schedule.
+    user (UserDAO): The current authenticated teacher.
+    db (AsyncSession): Active database session.
+
+    Returns:
+    ResponseEnvelope[LessonGetSchema]: The created lesson after validation and
+    teacher-student relation checks succeed.
+    """
     logger.info(
         "Lesson creation requested.",
         extra={
@@ -127,7 +150,19 @@ async def update_lesson(
     user: UserDAO = Depends(get_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> ResponseEnvelope[LessonGetSchema]:
-    """Update lesson fields for one teacher-owned lesson."""
+    """
+    Update one lesson owned by the current authenticated teacher.
+
+    Parameters:
+    lesson (LessonUpdateSchema): Partial lesson payload with fields to change.
+    lesson_id (int): Identifier of the lesson to update.
+    user (UserDAO): The current authenticated teacher.
+    db (AsyncSession): Active database session.
+
+    Returns:
+    ResponseEnvelope[LessonGetSchema]: The updated lesson record after validation,
+    ownership checks and status transition rules are applied.
+    """
     logger.info(
         "Lesson update requested.",
         extra={
@@ -188,7 +223,17 @@ async def delete_lesson(
     user: UserDAO = Depends(get_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> ResponseEnvelope[int]:
-    """Soft-delete one lesson that belongs to the current teacher."""
+    """
+    Soft-delete a lesson owned by the current authenticated teacher.
+
+    Parameters:
+    lesson_id (int): Identifier of the lesson to delete.
+    user (UserDAO): The current authenticated teacher.
+    db (AsyncSession): Active database session.
+
+    Returns:
+    ResponseEnvelope[int]: The identifier of the lesson that was deleted.
+    """
     logger.info(
         "Lesson deletion requested.",
         extra={"user_id": user.id, "lesson_id": lesson_id},

@@ -27,7 +27,16 @@ router = APIRouter(prefix=PREFIX, tags=["Users"])
 async def get_current_user(
     user: UserDAO = Depends(get_user),
 ) -> ResponseEnvelope[UserGetSchema]:
-    """Return the current authenticated user's application profile."""
+    """
+    Retrieve the current authenticated user's application profile.
+
+    Parameters:
+    user (UserDAO): The current authenticated application user.
+
+    Returns:
+    ResponseEnvelope[UserGetSchema]: The current user's normalized application
+    profile.
+    """
     logger.info(
         "Current user profile requested.",
         extra={"user_id": str(user.id), "role": user.role},

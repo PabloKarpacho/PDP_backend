@@ -59,7 +59,16 @@ def _validate_upload_input(
     ),
 )
 async def upload_file(file: UploadFile) -> ResponseEnvelope[FileUploadSchema]:
-    """Upload one file into the shared storage layer for later domain reuse."""
+    """
+    Upload a file into the shared storage layer.
+
+    Parameters:
+    file (UploadFile): The incoming file object provided by FastAPI.
+
+    Returns:
+    ResponseEnvelope[FileUploadSchema]: Structured metadata about the stored file,
+    including its object key and a temporary download URL.
+    """
     try:
         file_content = await file.read()
         content_type = _normalize_content_type(file.content_type)

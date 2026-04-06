@@ -48,7 +48,18 @@ async def get_homeworks(
     db: AsyncSession = Depends(get_db),
     lesson_id: int | None = None,
 ) -> ResponseEnvelope[list[HomeworkGetSchema]]:
-    """List homework entries that the current teacher or student is allowed to see."""
+    """
+    List homework items visible to the current authenticated user.
+
+    Parameters:
+    user (UserDAO): The current authenticated application user.
+    db (AsyncSession): Active database session.
+    lesson_id (int | None): Optional lesson identifier used to narrow the result set.
+
+    Returns:
+    ResponseEnvelope[list[HomeworkGetSchema]]: Homework records that the current
+    teacher or student is allowed to access.
+    """
     logger.info(
         "Homework list requested.",
         extra={
@@ -81,7 +92,18 @@ async def get_homework(
     user: UserDAO = Depends(get_user),
     db: AsyncSession = Depends(get_db),
 ) -> ResponseEnvelope[HomeworkGetSchema]:
-    """Return homework details when the current user owns the related lesson context."""
+    """
+    Retrieve one homework item when the current user has access to it.
+
+    Parameters:
+    homework_id (int): Identifier of the homework item to load.
+    user (UserDAO): The current authenticated application user.
+    db (AsyncSession): Active database session.
+
+    Returns:
+    ResponseEnvelope[HomeworkGetSchema]: The requested homework item when it belongs
+    to a lesson visible to the current user.
+    """
     logger.info(
         "Homework detail requested.",
         extra={"user_id": user.id, "homework_id": homework_id},
@@ -128,7 +150,18 @@ async def create_homework(
     user: UserDAO = Depends(get_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> ResponseEnvelope[HomeworkGetSchema]:
-    """Create homework for one lesson that belongs to the current teacher."""
+    """
+    Create homework for a lesson owned by the current teacher.
+
+    Parameters:
+    homework (HomeworkCreateSchema): Input payload describing the homework to create.
+    user (UserDAO): The current authenticated teacher.
+    db (AsyncSession): Active database session.
+
+    Returns:
+    ResponseEnvelope[HomeworkGetSchema]: The created homework item linked to the
+    requested lesson.
+    """
     logger.info(
         "Homework creation requested.",
         extra={
@@ -194,7 +227,19 @@ async def update_homework(
     user: UserDAO = Depends(get_user),
     db: AsyncSession = Depends(get_db),
 ) -> ResponseEnvelope[HomeworkGetSchema]:
-    """Update homework fields allowed for the current user role and ownership scope."""
+    """
+    Update homework fields allowed for the current user role.
+
+    Parameters:
+    homework (HomeworkUpdateSchema): Partial payload with fields to update.
+    homework_id (int): Identifier of the homework item to update.
+    user (UserDAO): The current authenticated application user.
+    db (AsyncSession): Active database session.
+
+    Returns:
+    ResponseEnvelope[HomeworkGetSchema]: The updated homework item after ownership
+    checks and role-based field restrictions are applied.
+    """
     logger.info(
         "Homework update requested.",
         extra={
@@ -248,7 +293,17 @@ async def delete_homework(
     user: UserDAO = Depends(get_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> ResponseEnvelope[int]:
-    """Soft-delete one homework item that belongs to the current teacher."""
+    """
+    Soft-delete a homework item owned by the current teacher.
+
+    Parameters:
+    homework_id (int): Identifier of the homework item to delete.
+    user (UserDAO): The current authenticated teacher.
+    db (AsyncSession): Active database session.
+
+    Returns:
+    ResponseEnvelope[int]: The identifier of the homework item that was deleted.
+    """
     logger.info(
         "Homework deletion requested.",
         extra={"user_id": user.id, "homework_id": homework_id},

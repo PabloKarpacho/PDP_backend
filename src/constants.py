@@ -9,6 +9,11 @@ class LessonStatuses:
     CANCELLED = "cancelled"
 
 
+class RelationStatuses:
+    ACTIVE = "active"
+    ARCHIVED = "archived"
+
+
 LESSON_STATUS_TRANSITIONS: dict[str, frozenset[str]] = {
     LessonStatuses.ACTIVE: frozenset(
         {
@@ -20,6 +25,14 @@ LESSON_STATUS_TRANSITIONS: dict[str, frozenset[str]] = {
     LessonStatuses.PASSED: frozenset({LessonStatuses.PASSED}),
     LessonStatuses.CANCELLED: frozenset({LessonStatuses.CANCELLED}),
 }
+
+
+RELATION_STATUSES = frozenset(
+    {
+        RelationStatuses.ACTIVE,
+        RelationStatuses.ARCHIVED,
+    }
+)
 
 
 def normalize_role_name(role: str | None) -> str | None:

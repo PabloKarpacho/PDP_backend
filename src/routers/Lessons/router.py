@@ -12,7 +12,7 @@ from src.routers.Lessons.schemas import (
     LessonUpdateSchema,
 )
 from src.schemas import ResponseEnvelope, success_response
-from src.services.exceptions import NotFoundError, ValidationError
+from src.services.exceptions import ForbiddenError, NotFoundError, ValidationError
 from src.services.lessons import (
     create_lesson_for_teacher,
     delete_lesson_for_teacher,
@@ -78,6 +78,12 @@ async def create_lesson(
             extra={"user_id": user.id, "error_type": type(error).__name__},
         )
         raise HTTPException(400, str(error)) from error
+    except ForbiddenError as error:
+        logger.error(
+            "Lesson creation forbidden by relation policy.",
+            extra={"user_id": user.id, "student_id": lesson.student_id},
+        )
+        raise HTTPException(403, str(error)) from error
 
 
 @router.put("/update/{lesson_id}", response_model=ResponseEnvelope[LessonGetSchema])
@@ -123,6 +129,12 @@ async def update_lesson(
             },
         )
         raise HTTPException(400, str(error)) from error
+    except ForbiddenError as error:
+        logger.error(
+            "Lesson update forbidden by relation policy.",
+            extra={"user_id": user.id, "lesson_id": lesson_id},
+        )
+        raise HTTPException(403, str(error)) from error
 
 
 @router.delete("/delete/{lesson_id}", response_model=ResponseEnvelope[int])

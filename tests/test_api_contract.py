@@ -20,6 +20,7 @@ from src.services.exceptions import (
 homework_router_module = importlib.import_module("src.routers.Homework.router")
 lessons_router_module = importlib.import_module("src.routers.Lessons.router")
 files_router_module = importlib.import_module("src.routers.Files.router")
+relations_router_module = importlib.import_module("src.routers.Relations.router")
 
 
 def build_user(**overrides):
@@ -57,6 +58,19 @@ def build_lesson_payload():
         "lesson_description": "Algebra",
         "student_id": "student-1",
         "status": LessonStatuses.ACTIVE,
+    }
+
+
+def build_relation_payload():
+    now = datetime.now()
+    return {
+        "id": 1,
+        "teacher_id": "teacher-1",
+        "student_id": "student-1",
+        "status": "active",
+        "archived_at": None,
+        "updated_at": now.isoformat(),
+        "created_at": now.isoformat(),
     }
 
 
@@ -270,6 +284,64 @@ def test_conflict_errors_use_shared_error_envelope(client: TestClient, monkeypat
         "error": {
             "code": "conflict",
             "message": "Lesson already has homework",
+            "details": None,
+        },
+        "meta": {"pagination": None},
+    }
+
+
+def test_relations_students_endpoint_uses_success_envelope(
+    client: TestClient, monkeypatch
+):
+    async def fake_list_students_for_teacher(*, db, user, include_archived):
+        return [build_relation_payload()]
+
+    app.dependency_overrides[get_teacher] = lambda: build_user(
+        id="teacher-1",
+        role=Roles.TEACHER,
+    )
+    monkeypatch.setattr(
+        relations_router_module,
+        "list_students_for_teacher",
+        fake_list_students_for_teacher,
+    )
+
+    response = client.get("/relations/students")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success"] is True
+    assert body["error"] is None
+    assert body["meta"] == {"pagination": None}
+    assert body["data"][0]["teacher_id"] == "teacher-1"
+    assert body["data"][0]["student_id"] == "student-1"
+
+
+def test_relations_archive_forbidden_uses_shared_error_envelope(
+    client: TestClient, monkeypatch
+):
+    async def fake_archive_relation_for_user(*, db, relation_id, user):
+        raise ForbiddenError("Forbidden")
+
+    app.dependency_overrides[get_user] = lambda: build_user(
+        id="student-2",
+        role=Roles.STUDENT,
+    )
+    monkeypatch.setattr(
+        relations_router_module,
+        "archive_relation_for_user",
+        fake_archive_relation_for_user,
+    )
+
+    response = client.post("/relations/archive/7")
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "success": False,
+        "data": None,
+        "error": {
+            "code": "forbidden",
+            "message": "Forbidden",
             "details": None,
         },
         "meta": {"pagination": None},

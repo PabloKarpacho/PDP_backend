@@ -72,9 +72,23 @@ async def test_create_homework_for_teacher_requires_lesson_id():
 
 @pytest.mark.asyncio
 async def test_create_homework_for_teacher_maps_conflict(monkeypatch):
+    async def fake_get_lesson(db, *, lesson_id, teacher_id):
+        return SimpleNamespace(
+            id=lesson_id,
+            teacher_id=teacher_id,
+            student_id="student-1",
+        )
+
+    async def fake_ensure_active_relation(*, db, teacher_id, student_id):
+        return None
+
     async def fake_create_homework(db, **payload):
         raise ValueError("Lesson already has homework")
 
+    monkeypatch.setattr(homework_service, "get_lesson_record", fake_get_lesson)
+    monkeypatch.setattr(
+        homework_service, "ensure_active_relation", fake_ensure_active_relation
+    )
     monkeypatch.setattr(
         homework_service, "create_homework_record", fake_create_homework
     )
@@ -90,6 +104,50 @@ async def test_create_homework_for_teacher_maps_conflict(monkeypatch):
                 files_urls=None,
                 answer=None,
                 sent_files=None,
+                deadline=None,
+            ),
+        )
+
+
+@pytest.mark.asyncio
+async def test_create_homework_for_teacher_requires_active_relation(monkeypatch):
+    async def fake_get_lesson(db, *, lesson_id, teacher_id):
+        return SimpleNamespace(
+            id=lesson_id,
+            teacher_id=teacher_id,
+            student_id="student-1",
+        )
+
+    async def fake_ensure_active_relation(*, db, teacher_id, student_id):
+        raise ForbiddenError("Active teacher-student relation is required")
+
+    async def fake_create_homework(db, **payload):
+        raise AssertionError("Homework must not be created without active relation")
+
+    monkeypatch.setattr(homework_service, "get_lesson_record", fake_get_lesson)
+    monkeypatch.setattr(
+        homework_service,
+        "ensure_active_relation",
+        fake_ensure_active_relation,
+    )
+    monkeypatch.setattr(
+        homework_service,
+        "create_homework_record",
+        fake_create_homework,
+    )
+
+    with pytest.raises(
+        ForbiddenError,
+        match="Active teacher-student relation is required",
+    ):
+        await homework_service.create_homework_for_teacher(
+            db=FakeAsyncSession(),
+            user=build_user(id="teacher-1", role=Roles.TEACHER),
+            homework=SimpleNamespace(
+                lesson_id=5,
+                name="Homework 1",
+                description=None,
+                files_urls=None,
                 deadline=None,
             ),
         )

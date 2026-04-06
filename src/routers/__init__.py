@@ -1,7 +1,13 @@
 from importlib import import_module
 
 
-__all__ = ["files_router", "homework_router", "lesson_router", "user_router"]
+__all__ = [
+    "files_router",
+    "homework_router",
+    "lesson_router",
+    "relation_router",
+    "user_router",
+]
 
 
 def __getattr__(name: str):
@@ -13,6 +19,9 @@ def __getattr__(name: str):
 
     if name == "lesson_router":
         return import_module("src.routers.Lessons.router").router
+
+    if name == "relation_router":
+        return import_module("src.routers.Relations.router").router
 
     if name == "user_router":
         return import_module("src.routers.Users.router").router

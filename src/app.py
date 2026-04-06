@@ -15,6 +15,7 @@ from src.logger import sanitize_log_data
 from src.routers import files_router
 from src.routers import homework_router
 from src.routers import lesson_router
+from src.routers import relation_router
 from src.routers import user_router
 from src.schemas import (
     HealthStatusSchema,
@@ -25,7 +26,7 @@ from src.schemas import (
 from src.startup import create_lifespan
 
 
-routers = [user_router, lesson_router, homework_router, files_router]
+routers = [user_router, lesson_router, homework_router, relation_router, files_router]
 REQUEST_ID_HEADER = "X-Request-ID"
 
 
@@ -91,6 +92,7 @@ app.add_middleware(CustomMiddleware)
 app.include_router(user_router)
 app.include_router(lesson_router)
 app.include_router(homework_router)
+app.include_router(relation_router)
 app.include_router(files_router)
 
 

@@ -5,7 +5,7 @@ import pytest
 
 from src.constants import LessonStatuses, Roles
 from src.services import lessons as lessons_service
-from src.services.exceptions import NotFoundError, ValidationError
+from src.services.exceptions import ForbiddenError, NotFoundError, ValidationError
 
 
 class FakeAsyncSession:
@@ -112,12 +112,18 @@ async def test_create_lesson_for_teacher_uses_current_teacher_id(monkeypatch):
     captured = {}
     created_lesson = build_lesson(teacher_id="teacher-1")
 
+    async def fake_ensure_active_relation(*, db, teacher_id, student_id):
+        return None
+
     async def fake_create_lesson(db, **payload):
         captured["db"] = db
         captured["payload"] = payload
         return created_lesson
 
     monkeypatch.setattr(lessons_service, "create_lesson_record", fake_create_lesson)
+    monkeypatch.setattr(
+        lessons_service, "ensure_active_relation", fake_ensure_active_relation
+    )
 
     lesson = SimpleNamespace(
         start_time=datetime.now(),
@@ -142,7 +148,41 @@ async def test_create_lesson_for_teacher_uses_current_teacher_id(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_create_lesson_for_teacher_requires_active_relation(monkeypatch):
+    async def fake_ensure_active_relation(*, db, teacher_id, student_id):
+        raise ForbiddenError("Active teacher-student relation is required")
+
+    async def fake_create_lesson(db, **payload):
+        raise AssertionError("Lesson must not be created without active relation")
+
+    monkeypatch.setattr(
+        lessons_service, "ensure_active_relation", fake_ensure_active_relation
+    )
+    monkeypatch.setattr(lessons_service, "create_lesson_record", fake_create_lesson)
+
+    with pytest.raises(
+        ForbiddenError,
+        match="Active teacher-student relation is required",
+    ):
+        await lessons_service.create_lesson_for_teacher(
+            db=FakeAsyncSession(),
+            user=build_user(),
+            lesson=SimpleNamespace(
+                start_time=datetime.now(),
+                end_time=datetime.now() + timedelta(hours=1),
+                theme="Math",
+                lesson_description="Algebra",
+                student_id="student-1",
+                status=LessonStatuses.ACTIVE,
+            ),
+        )
+
+
+@pytest.mark.asyncio
 async def test_update_lesson_for_teacher_rejects_invalid_status_transition(monkeypatch):
+    async def fake_ensure_active_relation(*, db, teacher_id, student_id):
+        return None
+
     async def fake_get_lesson(db, *, lesson_id, teacher_id):
         return build_lesson(status=LessonStatuses.PASSED)
 
@@ -151,6 +191,9 @@ async def test_update_lesson_for_teacher_rejects_invalid_status_transition(monke
 
     monkeypatch.setattr(lessons_service, "get_lesson_record", fake_get_lesson)
     monkeypatch.setattr(lessons_service, "update_lesson_record", fake_update_lesson)
+    monkeypatch.setattr(
+        lessons_service, "ensure_active_relation", fake_ensure_active_relation
+    )
 
     with pytest.raises(ValidationError, match="Invalid lesson status transition"):
         await lessons_service.update_lesson_for_teacher(
@@ -167,6 +210,9 @@ async def test_update_lesson_for_teacher_rejects_invalid_status_transition(monke
 async def test_update_lesson_for_teacher_rejects_invalid_resulting_time_range(
     monkeypatch,
 ):
+    async def fake_ensure_active_relation(*, db, teacher_id, student_id):
+        return None
+
     async def fake_get_lesson(db, *, lesson_id, teacher_id):
         return build_lesson(
             start_time=datetime(2026, 3, 29, 10, 0),
@@ -178,6 +224,9 @@ async def test_update_lesson_for_teacher_rejects_invalid_resulting_time_range(
 
     monkeypatch.setattr(lessons_service, "get_lesson_record", fake_get_lesson)
     monkeypatch.setattr(lessons_service, "update_lesson_record", fake_update_lesson)
+    monkeypatch.setattr(
+        lessons_service, "ensure_active_relation", fake_ensure_active_relation
+    )
 
     with pytest.raises(ValidationError, match="start_time must be before end_time"):
         await lessons_service.update_lesson_for_teacher(

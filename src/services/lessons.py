@@ -21,6 +21,7 @@ from src.routers.Lessons.schemas import (
 )
 from src.routers.Lessons.utils import serialize_lesson
 from src.services.exceptions import NotFoundError, ValidationError
+from src.services.relations import ensure_active_relation
 
 
 def _get_lesson_filters(user: UserDAO) -> dict[str, str] | None:
@@ -113,6 +114,11 @@ async def create_lesson_for_teacher(
         "Creating lesson for teacher.",
         extra={"user_id": user.id, "student_id": lesson.student_id},
     )
+    await ensure_active_relation(
+        db=db,
+        teacher_id=user.id,
+        student_id=lesson.student_id,
+    )
     lesson_dao = await create_lesson_record(
         db,
         start_time=lesson.start_time,
@@ -155,6 +161,13 @@ async def update_lesson_for_teacher(
         raise NotFoundError("Lesson not found")
 
     update_data = _get_lesson_update_data(lesson)
+
+    student_id = update_data.get("student_id", existing_lesson.student_id)
+    await ensure_active_relation(
+        db=db,
+        teacher_id=user.id,
+        student_id=student_id,
+    )
 
     _validate_lesson_time_range(
         start_time=update_data.get("start_time", existing_lesson.start_time),

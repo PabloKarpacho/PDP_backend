@@ -7,7 +7,7 @@ from fastapi import HTTPException
 
 from src.constants import LessonStatuses, Roles
 from src.routers.Lessons.schemas import LessonCreateSchema, LessonUpdateSchema
-from src.services.exceptions import NotFoundError
+from src.services.exceptions import ForbiddenError, NotFoundError
 
 
 lessons_router_module = importlib.import_module("src.routers.Lessons.router")
@@ -156,6 +156,27 @@ async def test_create_lesson_for_teacher_uses_current_teacher_id(monkeypatch):
     assert captured["db"] is db
     assert captured["user"] is user
     assert captured["lesson"] is lesson_payload
+
+
+@pytest.mark.asyncio
+async def test_create_lesson_maps_forbidden_error_to_403(monkeypatch):
+    async def fake_create_lesson_for_teacher(*, db, user, lesson):
+        raise ForbiddenError("Active teacher-student relation is required")
+
+    monkeypatch.setattr(
+        lessons_router_module,
+        "create_lesson_for_teacher",
+        fake_create_lesson_for_teacher,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await lessons_router_module.create_lesson(
+            lesson=LessonCreateSchema(**build_lesson_payload()),
+            user=SimpleNamespace(id="teacher-1", role=Roles.TEACHER),
+            db=object(),
+        )
+
+    assert exc_info.value.status_code == 403
 
 
 @pytest.mark.asyncio

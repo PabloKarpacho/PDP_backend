@@ -205,6 +205,27 @@ async def test_create_homework_maps_validation_error_to_400(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_create_homework_maps_forbidden_error_to_403(monkeypatch):
+    async def fake_create_homework_for_teacher(*, db, user, homework):
+        raise ForbiddenError("Active teacher-student relation is required")
+
+    monkeypatch.setattr(
+        homework_router_module,
+        "create_homework_for_teacher",
+        fake_create_homework_for_teacher,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await homework_router_module.create_homework(
+            homework=HomeworkCreateSchema(**build_homework_payload()),
+            user=SimpleNamespace(id="teacher-1", role=Roles.TEACHER),
+            db=object(),
+        )
+
+    assert exc_info.value.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_create_homework_maps_conflict_error_to_409(monkeypatch):
     async def fake_create_homework_for_teacher(*, db, user, homework):
         raise ConflictError("Lesson already has homework")

@@ -16,12 +16,14 @@ from src.routers.Homework.schemas import (
     HomeworkUpdateSchema,
 )
 from src.routers.Homework.utils import serialize_homework
+from src.routers.Lessons.crud import get_lesson as get_lesson_record
 from src.services.exceptions import (
     ConflictError,
     ForbiddenError,
     NotFoundError,
     ValidationError,
 )
+from src.services.relations import ensure_active_relation
 
 
 def _get_homework_filters(user: UserDAO) -> dict[str, str] | None:
@@ -168,6 +170,24 @@ async def create_homework_for_teacher(
         "Creating homework for teacher.",
         extra={"user_id": user.id, "lesson_id": homework.lesson_id},
     )
+    lesson_record = await get_lesson_record(
+        db,
+        lesson_id=homework.lesson_id,
+        teacher_id=user.id,
+    )
+    if lesson_record is None:
+        logger.error(
+            "Homework creation failed because lesson was not found.",
+            extra={"user_id": user.id, "lesson_id": homework.lesson_id},
+        )
+        raise NotFoundError("Lesson not found")
+
+    await ensure_active_relation(
+        db=db,
+        teacher_id=user.id,
+        student_id=lesson_record.student_id,
+    )
+
     try:
         homework_dao = await create_homework_record(
             db,
@@ -190,13 +210,6 @@ async def create_homework_for_teacher(
             },
         )
         raise ConflictError(str(error)) from error
-
-    if homework_dao is None:
-        logger.error(
-            "Homework creation failed because lesson was not found.",
-            extra={"user_id": user.id, "lesson_id": homework.lesson_id},
-        )
-        raise NotFoundError("Lesson not found")
 
     logger.info(
         "Homework created for teacher.",

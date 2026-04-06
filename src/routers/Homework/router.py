@@ -121,6 +121,12 @@ async def create_homework(
             extra={"user_id": user.id, "error_type": type(error).__name__},
         )
         raise HTTPException(400, str(error)) from error
+    except ForbiddenError as error:
+        logger.error(
+            "Homework creation forbidden by relation policy.",
+            extra={"user_id": user.id, "lesson_id": homework.lesson_id},
+        )
+        raise HTTPException(403, str(error)) from error
     except ConflictError as error:
         logger.error(
             "Homework creation rejected by conflict.",

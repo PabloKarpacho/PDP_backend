@@ -8,6 +8,9 @@ ENV UV_COMPILE_BYTECODE=1
 ENV UV_LINK_MODE=copy
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
+ENV UVICORN_SSL_MODE=true
+ENV UVICORN_SSL_CERTFILE=/opt/certs/cert.pem
+ENV UVICORN_SSL_KEYFILE=/opt/certs/key.pem
 
 WORKDIR /work
 
@@ -22,11 +25,15 @@ RUN uv sync --frozen --no-dev --no-install-project
 
 COPY src ./src
 COPY scripts ./scripts
-COPY certs ./certs
+COPY certs /opt/certs
 
 RUN chmod +x ./scripts/run-backend.sh
 
-RUN useradd --create-home appuser && chown -R appuser:appuser /work
+RUN useradd --create-home appuser && \
+    chown -R appuser:appuser /work /opt/certs && \
+    chmod 755 /opt/certs && \
+    chmod 644 /opt/certs/cert.pem && \
+    chmod 600 /opt/certs/key.pem
 USER appuser
 
 EXPOSE 8000

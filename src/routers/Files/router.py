@@ -4,11 +4,11 @@ from src.config import CONFIG
 from src.database_control.s3 import (
     build_storage_object_key,
     get_s3_client,
-    sanitize_storage_filename,
     StorageError,
 )
 from src.logger import logger
 from src.routers.Files.schemas import FileUploadSchema
+from src.routers.Files.utils import normalize_content_type, validate_upload_input
 from src.schemas import ResponseEnvelope, success_response
 
 
@@ -16,30 +16,6 @@ PREFIX = "/files"
 
 
 router = APIRouter(prefix=PREFIX, tags=["Files"])
-
-
-def _normalize_content_type(content_type: str | None) -> str:
-    normalized_content_type = (
-        (content_type or "application/octet-stream").strip().lower()
-    )
-    return normalized_content_type or "application/octet-stream"
-
-
-def _validate_upload_input(
-    *,
-    filename: str | None,
-    content_type: str,
-    size: int,
-) -> str:
-    safe_filename = sanitize_storage_filename(filename)
-
-    if size > CONFIG.FILE_UPLOAD_MAX_BYTES:
-        raise HTTPException(status_code=400, detail="File is too large")
-
-    if content_type not in CONFIG.FILE_UPLOAD_ALLOWED_CONTENT_TYPES:
-        raise HTTPException(status_code=400, detail="Unsupported file content type")
-
-    return safe_filename
 
 
 @router.post(
@@ -60,8 +36,8 @@ async def upload_file(file: UploadFile) -> ResponseEnvelope[FileUploadSchema]:
     """
     try:
         file_content = await file.read()
-        content_type = _normalize_content_type(file.content_type)
-        safe_filename = _validate_upload_input(
+        content_type = normalize_content_type(file.content_type)
+        safe_filename = validate_upload_input(
             filename=file.filename,
             content_type=content_type,
             size=len(file_content),

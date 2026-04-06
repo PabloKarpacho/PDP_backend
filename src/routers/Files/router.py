@@ -42,8 +42,24 @@ def _validate_upload_input(
     return safe_filename
 
 
-@router.post("/file_upload", response_model=ResponseEnvelope[FileUploadSchema])
+@router.post(
+    "/file_upload",
+    response_model=ResponseEnvelope[FileUploadSchema],
+    summary="Upload file to object storage",
+    description=(
+        "Accepts a single file, validates filename, size and content type, "
+        "stores the object in S3-compatible storage and returns structured file "
+        "metadata with a temporary download URL. "
+        "This endpoint is intended as a reusable platform capability for other "
+        "domains such as homework and chat attachments."
+    ),
+    response_description=(
+        "Structured metadata of the stored file, including object key and "
+        "presigned download URL."
+    ),
+)
 async def upload_file(file: UploadFile) -> ResponseEnvelope[FileUploadSchema]:
+    """Upload one file into the shared storage layer for later domain reuse."""
     try:
         file_content = await file.read()
         content_type = _normalize_content_type(file.content_type)

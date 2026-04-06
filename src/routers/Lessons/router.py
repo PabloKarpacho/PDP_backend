@@ -26,13 +26,25 @@ PREFIX = "/lessons"
 router = APIRouter(prefix=PREFIX, tags=["Lessons"])
 
 
-@router.get("", response_model=ResponseEnvelope[list[LessonGetSchema]])
+@router.get(
+    "",
+    response_model=ResponseEnvelope[list[LessonGetSchema]],
+    summary="List visible lessons",
+    description=(
+        "Returns lessons available to the current authenticated user. "
+        "Teachers see their own lessons, students see lessons assigned to them. "
+        "Optional `start_time` and `end_time` parameters can be used to narrow "
+        "the result set to a time window."
+    ),
+    response_description="Lesson list visible to the current user.",
+)
 async def get_lessons(
     user: UserDAO = Depends(get_user),
     db: AsyncSession = Depends(get_db),
     start_time: datetime.datetime | None = None,
     end_time: datetime.datetime | None = None,
 ) -> ResponseEnvelope[list[LessonGetSchema]]:
+    """List lessons for the current teacher or student, optionally filtered by time."""
     logger.info(
         "Lessons list requested.",
         extra={
@@ -51,12 +63,23 @@ async def get_lessons(
     return success_response(lessons)
 
 
-@router.post("/create", response_model=ResponseEnvelope[LessonGetSchema])
+@router.post(
+    "/create",
+    response_model=ResponseEnvelope[LessonGetSchema],
+    summary="Create lesson",
+    description=(
+        "Creates a new lesson for the current teacher and the requested student. "
+        "The endpoint validates the lesson payload, enforces the teacher role and "
+        "requires an active teacher-student relation before the lesson can be scheduled."
+    ),
+    response_description="Created lesson record.",
+)
 async def create_lesson(
     lesson: LessonCreateSchema,
     user: UserDAO = Depends(get_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> ResponseEnvelope[LessonGetSchema]:
+    """Create one scheduled lesson owned by the current teacher."""
     logger.info(
         "Lesson creation requested.",
         extra={
@@ -86,13 +109,25 @@ async def create_lesson(
         raise HTTPException(403, str(error)) from error
 
 
-@router.put("/update/{lesson_id}", response_model=ResponseEnvelope[LessonGetSchema])
+@router.put(
+    "/update/{lesson_id}",
+    response_model=ResponseEnvelope[LessonGetSchema],
+    summary="Update lesson",
+    description=(
+        "Updates one lesson owned by the current teacher. "
+        "The endpoint enforces lesson status transitions, validates the effective "
+        "time range and, when the student is changed, checks that an active "
+        "teacher-student relation exists for the new pair."
+    ),
+    response_description="Updated lesson record.",
+)
 async def update_lesson(
     lesson: LessonUpdateSchema,
     lesson_id: int,
     user: UserDAO = Depends(get_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> ResponseEnvelope[LessonGetSchema]:
+    """Update lesson fields for one teacher-owned lesson."""
     logger.info(
         "Lesson update requested.",
         extra={
@@ -137,12 +172,23 @@ async def update_lesson(
         raise HTTPException(403, str(error)) from error
 
 
-@router.delete("/delete/{lesson_id}", response_model=ResponseEnvelope[int])
+@router.delete(
+    "/delete/{lesson_id}",
+    response_model=ResponseEnvelope[int],
+    summary="Delete lesson",
+    description=(
+        "Soft-deletes a lesson owned by the current teacher. "
+        "The operation removes the lesson from normal visibility while preserving "
+        "the identifier for audit-friendly workflows and related domain cleanup."
+    ),
+    response_description="Identifier of the lesson that was deleted.",
+)
 async def delete_lesson(
     lesson_id: int,
     user: UserDAO = Depends(get_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> ResponseEnvelope[int]:
+    """Soft-delete one lesson that belongs to the current teacher."""
     logger.info(
         "Lesson deletion requested.",
         extra={"user_id": user.id, "lesson_id": lesson_id},

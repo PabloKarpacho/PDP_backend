@@ -31,12 +31,24 @@ PREFIX = "/homeworks"
 router = APIRouter(prefix=PREFIX, tags=["Homeworks"])
 
 
-@router.get("", response_model=ResponseEnvelope[list[HomeworkGetSchema]])
+@router.get(
+    "",
+    response_model=ResponseEnvelope[list[HomeworkGetSchema]],
+    summary="List visible homework items",
+    description=(
+        "Returns homework visible to the current authenticated user. "
+        "Teachers see homework for their own lessons, students see homework "
+        "assigned to them. The optional `lesson_id` filter narrows the list to "
+        "one lesson when the user already has access to it."
+    ),
+    response_description="Homework list available to the current user.",
+)
 async def get_homeworks(
     user: UserDAO = Depends(get_user),
     db: AsyncSession = Depends(get_db),
     lesson_id: int | None = None,
 ) -> ResponseEnvelope[list[HomeworkGetSchema]]:
+    """List homework entries that the current teacher or student is allowed to see."""
     logger.info(
         "Homework list requested.",
         extra={
@@ -53,12 +65,23 @@ async def get_homeworks(
     return success_response(homeworks)
 
 
-@router.get("/{homework_id}", response_model=ResponseEnvelope[HomeworkGetSchema])
+@router.get(
+    "/{homework_id}",
+    response_model=ResponseEnvelope[HomeworkGetSchema],
+    summary="Get homework details",
+    description=(
+        "Loads one homework item by identifier with ownership checks. "
+        "The endpoint is available to authenticated teachers and students, but "
+        "only if the homework belongs to a lesson they are allowed to access."
+    ),
+    response_description="One homework item visible to the current user.",
+)
 async def get_homework(
     homework_id: int,
     user: UserDAO = Depends(get_user),
     db: AsyncSession = Depends(get_db),
 ) -> ResponseEnvelope[HomeworkGetSchema]:
+    """Return homework details when the current user owns the related lesson context."""
     logger.info(
         "Homework detail requested.",
         extra={"user_id": user.id, "homework_id": homework_id},
@@ -88,12 +111,24 @@ async def get_homework(
         raise HTTPException(404, "Homework not found")
 
 
-@router.post("/create", response_model=ResponseEnvelope[HomeworkGetSchema])
+@router.post(
+    "/create",
+    response_model=ResponseEnvelope[HomeworkGetSchema],
+    summary="Create homework for lesson",
+    description=(
+        "Creates a new homework item for a teacher-owned lesson. "
+        "The caller must be a teacher, the lesson must exist, and the "
+        "teacher-student relation behind that lesson must still be active. "
+        "The endpoint rejects duplicate homework for the same lesson."
+    ),
+    response_description="Created homework item bound to the requested lesson.",
+)
 async def create_homework(
     homework: HomeworkCreateSchema,
     user: UserDAO = Depends(get_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> ResponseEnvelope[HomeworkGetSchema]:
+    """Create homework for one lesson that belongs to the current teacher."""
     logger.info(
         "Homework creation requested.",
         extra={
@@ -141,13 +176,25 @@ async def create_homework(
         raise HTTPException(404, "Lesson not found") from error
 
 
-@router.put("/update/{homework_id}", response_model=ResponseEnvelope[HomeworkGetSchema])
+@router.put(
+    "/update/{homework_id}",
+    response_model=ResponseEnvelope[HomeworkGetSchema],
+    summary="Update homework",
+    description=(
+        "Updates one homework item with role-aware rules. "
+        "Teachers can edit teacher-managed fields such as description, files and "
+        "deadline for homework linked to their lessons. Students can update only "
+        "their answer and submitted files for homework visible to them."
+    ),
+    response_description="Updated homework item after ownership and validation checks.",
+)
 async def update_homework(
     homework: HomeworkUpdateSchema,
     homework_id: int,
     user: UserDAO = Depends(get_user),
     db: AsyncSession = Depends(get_db),
 ) -> ResponseEnvelope[HomeworkGetSchema]:
+    """Update homework fields allowed for the current user role and ownership scope."""
     logger.info(
         "Homework update requested.",
         extra={
@@ -185,12 +232,23 @@ async def update_homework(
         raise HTTPException(404, "Homework not found") from error
 
 
-@router.delete("/delete/{homework_id}", response_model=ResponseEnvelope[int])
+@router.delete(
+    "/delete/{homework_id}",
+    response_model=ResponseEnvelope[int],
+    summary="Delete homework",
+    description=(
+        "Soft-deletes a homework item owned by the current teacher. "
+        "This endpoint is intentionally teacher-only because homework lifecycle "
+        "and assignment rules are controlled from the teaching side."
+    ),
+    response_description="Identifier of the homework item that was deleted.",
+)
 async def delete_homework(
     homework_id: int,
     user: UserDAO = Depends(get_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> ResponseEnvelope[int]:
+    """Soft-delete one homework item that belongs to the current teacher."""
     logger.info(
         "Homework deletion requested.",
         extra={"user_id": user.id, "homework_id": homework_id},

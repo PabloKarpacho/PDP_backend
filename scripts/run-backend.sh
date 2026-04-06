@@ -17,6 +17,8 @@ uvicorn_args=(
     "$APP_MODULE"
     --host "$APP_HOST"
     --port "$APP_PORT"
+    --ssl-certfile="$PROJECT_ROOT/certs/cert.pem"
+    --ssl-keyfile="$PROJECT_ROOT/certs/key.pem"
 )
 
 if [[ "$APP_WORKERS" =~ ^[0-9]+$ ]] && [ "$APP_WORKERS" -gt 1 ]; then

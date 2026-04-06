@@ -1,7 +1,6 @@
-from typing import Any, Literal
+from typing import Literal
 
 from dotenv import find_dotenv
-from pydantic import AliasChoices
 from pydantic import Field
 from pydantic import model_validator
 from pydantic_settings import BaseSettings
@@ -13,13 +12,6 @@ from src.schemas import authConfiguration
 _ENV_FILE = find_dotenv("/work/config/env.file") or find_dotenv() or None
 
 
-def env_field(default: Any, *env_names: str) -> Any:
-    return Field(
-        default=default,
-        validation_alias=AliasChoices(*env_names),
-    )
-
-
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=_ENV_FILE,
@@ -28,60 +20,49 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    ENV: str = env_field("production", "ENV", "APP_ENV", "ENVIRONMENT")
-    PROJECT_NAME: str = env_field(
-        "fastapi-best-practices",
-        "PROJECT_NAME",
-        "APP_NAME",
-        "SERVICE_NAME",
-    )
-    APP_PORT: int = env_field(8080, "APP_PORT", "PORT")
-    APP_HOST: str = env_field("0.0.0.0", "APP_HOST", "HOST")
-    APP_WORKERS: int = env_field(1, "APP_WORKERS", "WEB_CONCURRENCY")
-    SEND_LOGS_TO_GRAYLOG: bool = env_field(
-        False,
-        "SEND_LOGS_TO_GRAYLOG",
-        "GRAYLOG_ENABLED",
-    )
-    GRAYLOG_HOST: str = env_field("localhost", "GRAYLOG_HOST")
-    GRAYLOG_PORT: int = env_field(12201, "GRAYLOG_PORT")
+    ENV: str = Field(default="production", alias="ENV")
+    PROJECT_NAME: str = Field(default="fastapi-best-practices", alias="PROJECT_NAME")
+    APP_PORT: int = Field(default=8080, alias="APP_PORT")
+    APP_HOST: str = Field(default="0.0.0.0", alias="APP_HOST")
+    APP_WORKERS: int = Field(default=1, alias="APP_WORKERS")
+    SEND_LOGS_TO_GRAYLOG: bool = Field(default=False, alias="SEND_LOGS_TO_GRAYLOG")
+    GRAYLOG_HOST: str = Field(default="localhost", alias="GRAYLOG_HOST")
+    GRAYLOG_PORT: int = Field(default=12201, alias="GRAYLOG_PORT")
 
     # DATABASE
-    DATABASE_BACKEND: Literal["local", "aws"] = env_field(
-        "local",
-        "DATABASE_BACKEND",
-        "DB_BACKEND",
+    DATABASE_BACKEND: Literal["local", "aws"] = Field(
+        default="local",
+        alias="DATABASE_BACKEND",
     )
-    POSTGRESQL_DSN: str = env_field(
+    POSTGRESQL_DSN: str = Field(
         "postgresql+asyncpg://app:change-me@localhost:5432/pdp",
-        "POSTGRESQL_DSN",
-        "DATABASE_URL",
+        alias="POSTGRESQL_DSN",
     )
-    AWS_POSTGRES_REGION: str = env_field("eu-north-1", "AWS_POSTGRES_REGION")
-    AWS_POSTGRES_HOST: str = env_field("localhost", "AWS_POSTGRES_HOST")
-    AWS_POSTGRES_PORT: int = env_field(5432, "AWS_POSTGRES_PORT")
-    AWS_POSTGRES_DB: str = env_field("pdp", "AWS_POSTGRES_DB")
-    AWS_POSTGRES_USER: str = env_field("app", "AWS_POSTGRES_USER")
-    AWS_POSTGRES_SECRET_ARN: str = env_field("", "AWS_POSTGRES_SECRET_ARN")
-    AWS_POSTGRES_SSL_MODE: str = env_field("disable", "AWS_POSTGRES_SSL_MODE")
-    AWS_POSTGRES_SSL_ROOT_CERT: str = env_field("", "AWS_POSTGRES_SSL_ROOT_CERT")
+    AWS_POSTGRES_REGION: str = Field(default="eu-north-1", alias="AWS_POSTGRES_REGION")
+    AWS_POSTGRES_HOST: str = Field(default="localhost", alias="AWS_POSTGRES_HOST")
+    AWS_POSTGRES_PORT: int = Field(default=5432, alias="AWS_POSTGRES_PORT")
+    AWS_POSTGRES_DB: str = Field(default="pdp", alias="AWS_POSTGRES_DB")
+    AWS_POSTGRES_USER: str = Field(default="app", alias="AWS_POSTGRES_USER")
+    AWS_POSTGRES_SECRET_ARN: str = Field(default="", alias="AWS_POSTGRES_SECRET_ARN")
+    AWS_POSTGRES_SSL_MODE: str = Field(default="disable", alias="AWS_POSTGRES_SSL_MODE")
+    AWS_POSTGRES_SSL_ROOT_CERT: str = Field(
+        default="",
+        alias="AWS_POSTGRES_SSL_ROOT_CERT",
+    )
 
     # AUTH
-    SECRET_KEY: str = env_field("change-me", "SECRET_KEY", "APP_SECRET_KEY")
-    ALGORITHM: str = env_field("HS256", "ALGORITHM")
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = env_field(
-        30,
-        "ACCESS_TOKEN_EXPIRE_MINUTES",
+    SECRET_KEY: str = Field(default="change-me", alias="SECRET_KEY")
+    ALGORITHM: str = Field(default="HS256", alias="ALGORITHM")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(
+        default=30,
+        alias="ACCESS_TOKEN_EXPIRE_MINUTES",
     )
 
     # MAIL
-    SMTP_SERVER: str = Field(
-        default="localhost",
-        validation_alias=AliasChoices("SMTP_SERVER", "SMTP_HOST"),
-    )
-    SMTP_PORT: int = env_field(465, "SMTP_PORT")
-    SMTP_USER: str = env_field("noreply@example.com", "SMTP_USER", "SMTP_USERNAME")
-    SMTP_PASSWORD: str = env_field("change-me", "SMTP_PASSWORD")
+    SMTP_SERVER: str = Field(default="localhost", alias="SMTP_SERVER")
+    SMTP_PORT: int = Field(default=465, alias="SMTP_PORT")
+    SMTP_USER: str = Field(default="noreply@example.com", alias="SMTP_USER")
+    SMTP_PASSWORD: str = Field(default="change-me", alias="SMTP_PASSWORD")
 
     # USER
     ROLES_HASHMAP: dict[str, dict[str, bool]] = Field(
@@ -92,45 +73,22 @@ class Settings(BaseSettings):
     )
 
     # FILES
-    STORAGE_BACKEND: Literal["minio", "aws"] = env_field(
-        "minio",
-        "STORAGE_BACKEND",
-        "FILES_STORAGE_BACKEND",
+    STORAGE_BACKEND: Literal["minio", "aws"] = Field(
+        default="minio",
+        alias="STORAGE_BACKEND",
     )
-    FILES_BUCKET_NAME: str = Field(
-        default="pdp-files",
-        validation_alias=AliasChoices("FILES_BUCKET_NAME", "MINIO_FILES_BUCKET_NAME"),
-    )
-    STORAGE_REGION: str = Field(
-        default="us-east-1",
-        validation_alias=AliasChoices("STORAGE_REGION", "AWS_REGION"),
-    )
-    MINIO_ENDPOINT: str = Field(
-        default="localhost:9000",
-        validation_alias=AliasChoices(
-            "MINIO_ENDPOINT",
-            "MINIO_ENDPOINT_URL",
-            "S3_ENDPOINT_URL",
-        ),
-    )
-    MINIO_ROOT_USER: str = Field(
-        default="minioadmin",
-        validation_alias=AliasChoices(
-            "MINIO_ROOT_USER",
-            "MINIO_ACCESS_KEY",
-        ),
-    )
+    FILES_BUCKET_NAME: str = Field(default="pdp-files", alias="FILES_BUCKET_NAME")
+    STORAGE_REGION: str = Field(default="us-east-1", alias="STORAGE_REGION")
+    MINIO_ENDPOINT: str = Field(default="localhost:9000", alias="MINIO_ENDPOINT")
+    MINIO_ROOT_USER: str = Field(default="minioadmin", alias="MINIO_ROOT_USER")
     MINIO_ROOT_PASSWORD: str = Field(
         default="change-me",
-        validation_alias=AliasChoices(
-            "MINIO_ROOT_PASSWORD",
-            "MINIO_SECRET_KEY",
-        ),
+        alias="MINIO_ROOT_PASSWORD",
     )
-    MINIO_SECURE: bool = env_field(False, "MINIO_SECURE")
-    FILE_UPLOAD_MAX_BYTES: int = env_field(
-        10 * 1024 * 1024,
-        "FILE_UPLOAD_MAX_BYTES",
+    MINIO_SECURE: bool = Field(default=False, alias="MINIO_SECURE")
+    FILE_UPLOAD_MAX_BYTES: int = Field(
+        default=10 * 1024 * 1024,
+        alias="FILE_UPLOAD_MAX_BYTES",
     )
     FILE_UPLOAD_ALLOWED_CONTENT_TYPES: tuple[str, ...] = (
         "image/jpeg",
@@ -140,59 +98,30 @@ class Settings(BaseSettings):
         "text/plain",
         "application/octet-stream",
     )
-    FILE_UPLOAD_URL_EXPIRY_SECONDS: int = env_field(
-        3600,
-        "FILE_UPLOAD_URL_EXPIRY_SECONDS",
+    FILE_UPLOAD_URL_EXPIRY_SECONDS: int = Field(
+        default=3600,
+        alias="FILE_UPLOAD_URL_EXPIRY_SECONDS",
     )
 
     # KEYCLOAK
     KEYCLOAK_HOST_URL: str = Field(
         default="http://localhost:8080",
-        validation_alias=AliasChoices("KEYCLOAK_HOST_URL", "KEYCLOACK_HOST_URL"),
+        alias="KEYCLOAK_HOST_URL",
     )
     KEYCLOAK_PUBLIC_URL: str = Field(
         default="http://localhost:8080",
-        validation_alias=AliasChoices("KEYCLOAK_PUBLIC_URL", "KEYCLOACK_PUBLIC_URL"),
+        alias="KEYCLOAK_PUBLIC_URL",
     )
-    KEYCLOAK_REALM: str = Field(
-        default="pdp",
-        validation_alias=AliasChoices("KEYCLOAK_REALM", "KEYCLOACK_REALM"),
-    )
+    KEYCLOAK_REALM: str = Field(default="pdp", alias="KEYCLOAK_REALM")
     KEYCLOAK_CLIENT_ID: str = Field(
         default="fastapi-client",
-        validation_alias=AliasChoices("KEYCLOAK_CLIENT_ID", "KEYCLOACK_CLIENT_ID"),
+        alias="KEYCLOAK_CLIENT_ID",
     )
     KEYCLOAK_CLIENT_SECRET: str = Field(
         default="",
-        validation_alias=AliasChoices(
-            "KEYCLOAK_CLIENT_SECRET",
-            "KEYCLOACK_CLIENT_SECRET",
-        ),
+        alias="KEYCLOAK_CLIENT_SECRET",
     )
-    KEYCLOAK_ENABLE: bool = Field(
-        default=True,
-        validation_alias=AliasChoices("KEYCLOAK_ENABLE", "KEYCLOACK_ENABLE"),
-    )
-
-    @property
-    def KEYCLOACK_HOST_URL(self) -> str:
-        return self.KEYCLOAK_HOST_URL
-
-    @property
-    def KEYCLOACK_PUBLIC_URL(self) -> str:
-        return self.KEYCLOAK_PUBLIC_URL
-
-    @property
-    def KEYCLOACK_REALM(self) -> str:
-        return self.KEYCLOAK_REALM
-
-    @property
-    def KEYCLOACK_CLIENT_ID(self) -> str:
-        return self.KEYCLOAK_CLIENT_ID
-
-    @property
-    def KEYCLOACK_CLIENT_SECRET(self) -> str:
-        return self.KEYCLOAK_CLIENT_SECRET
+    KEYCLOAK_ENABLE: bool = Field(default=True, alias="KEYCLOAK_ENABLE")
 
     @model_validator(mode="after")
     def validate_storage_settings(self) -> "Settings":

@@ -14,7 +14,7 @@ services:
     environment:
       POSTGRESQL_DSN: ${DOCKER_POSTGRESQL_DSN}
       MINIO_ENDPOINT: ${DOCKER_MINIO_ENDPOINT}
-      KEYCLOACK_HOST_URL: ${DOCKER_KEYCLOACK_HOST_URL}
+      KEYCLOAK_HOST_URL: ${DOCKER_KEYCLOAK_HOST_URL}
     volumes:
       - .:/work
     networks:

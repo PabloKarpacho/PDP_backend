@@ -29,14 +29,6 @@ router = APIRouter(prefix=PREFIX, tags=["Lessons"])
 @router.get(
     "",
     response_model=ResponseEnvelope[list[LessonGetSchema]],
-    summary="List visible lessons",
-    description=(
-        "Returns lessons available to the current authenticated user. "
-        "Teachers see their own lessons, students see lessons assigned to them. "
-        "Optional `start_time` and `end_time` parameters can be used to narrow "
-        "the result set to a time window."
-    ),
-    response_description="Lesson list visible to the current user.",
 )
 async def get_lessons(
     user: UserDAO = Depends(get_user),
@@ -45,16 +37,22 @@ async def get_lessons(
     end_time: datetime.datetime | None = None,
 ) -> ResponseEnvelope[list[LessonGetSchema]]:
     """
+    ### Purpose
     List lessons visible to the current authenticated user.
 
-    Parameters:
-    user (UserDAO): The current authenticated application user.
-    db (AsyncSession): Active database session.
-    start_time (datetime.datetime | None): Optional lower bound for lesson start time.
-    end_time (datetime.datetime | None): Optional upper bound for lesson end time.
+    ### Access
+    Available to authenticated teachers and students.
 
-    Returns:
-    ResponseEnvelope[list[LessonGetSchema]]: Lessons available to the current
+    ### Parameters
+    - **user** (UserDAO): The current authenticated application user.
+    - **db** (AsyncSession): Active database session.
+    - **start_time** (datetime.datetime | None): Optional lower bound for lesson
+    start time.
+    - **end_time** (datetime.datetime | None): Optional upper bound for lesson end
+    time.
+
+    ### Returns
+    - **ResponseEnvelope[list[LessonGetSchema]]**: Lessons available to the current
     teacher or student, optionally filtered by the requested time window.
     """
     logger.info(
@@ -78,13 +76,6 @@ async def get_lessons(
 @router.post(
     "/create",
     response_model=ResponseEnvelope[LessonGetSchema],
-    summary="Create lesson",
-    description=(
-        "Creates a new lesson for the current teacher and the requested student. "
-        "The endpoint validates the lesson payload, enforces the teacher role and "
-        "requires an active teacher-student relation before the lesson can be scheduled."
-    ),
-    response_description="Created lesson record.",
 )
 async def create_lesson(
     lesson: LessonCreateSchema,
@@ -92,16 +83,21 @@ async def create_lesson(
     db: AsyncSession = Depends(get_db),
 ) -> ResponseEnvelope[LessonGetSchema]:
     """
+    ### Purpose
     Create a lesson for the current authenticated teacher.
 
-    Parameters:
-    lesson (LessonCreateSchema): Input payload describing the lesson to schedule.
-    user (UserDAO): The current authenticated teacher.
-    db (AsyncSession): Active database session.
+    ### Access
+    Available only to authenticated teachers.
 
-    Returns:
-    ResponseEnvelope[LessonGetSchema]: The created lesson after validation and
-    teacher-student relation checks succeed.
+    ### Parameters
+    - **lesson** (LessonCreateSchema): Input payload describing the lesson to
+    schedule.
+    - **user** (UserDAO): The current authenticated teacher.
+    - **db** (AsyncSession): Active database session.
+
+    ### Returns
+    - **ResponseEnvelope[LessonGetSchema]**: The created lesson after validation
+    and teacher-student relation checks succeed.
     """
     logger.info(
         "Lesson creation requested.",
@@ -135,14 +131,6 @@ async def create_lesson(
 @router.put(
     "/update/{lesson_id}",
     response_model=ResponseEnvelope[LessonGetSchema],
-    summary="Update lesson",
-    description=(
-        "Updates one lesson owned by the current teacher. "
-        "The endpoint enforces lesson status transitions, validates the effective "
-        "time range and, when the student is changed, checks that an active "
-        "teacher-student relation exists for the new pair."
-    ),
-    response_description="Updated lesson record.",
 )
 async def update_lesson(
     lesson: LessonUpdateSchema,
@@ -151,17 +139,22 @@ async def update_lesson(
     db: AsyncSession = Depends(get_db),
 ) -> ResponseEnvelope[LessonGetSchema]:
     """
+    ### Purpose
     Update one lesson owned by the current authenticated teacher.
 
-    Parameters:
-    lesson (LessonUpdateSchema): Partial lesson payload with fields to change.
-    lesson_id (int): Identifier of the lesson to update.
-    user (UserDAO): The current authenticated teacher.
-    db (AsyncSession): Active database session.
+    ### Access
+    Available only to authenticated teachers.
 
-    Returns:
-    ResponseEnvelope[LessonGetSchema]: The updated lesson record after validation,
-    ownership checks and status transition rules are applied.
+    ### Parameters
+    - **lesson** (LessonUpdateSchema): Partial lesson payload with fields to
+    change.
+    - **lesson_id** (int): Identifier of the lesson to update.
+    - **user** (UserDAO): The current authenticated teacher.
+    - **db** (AsyncSession): Active database session.
+
+    ### Returns
+    - **ResponseEnvelope[LessonGetSchema]**: The updated lesson record after
+    validation, ownership checks and status transition rules are applied.
     """
     logger.info(
         "Lesson update requested.",
@@ -210,13 +203,6 @@ async def update_lesson(
 @router.delete(
     "/delete/{lesson_id}",
     response_model=ResponseEnvelope[int],
-    summary="Delete lesson",
-    description=(
-        "Soft-deletes a lesson owned by the current teacher. "
-        "The operation removes the lesson from normal visibility while preserving "
-        "the identifier for audit-friendly workflows and related domain cleanup."
-    ),
-    response_description="Identifier of the lesson that was deleted.",
 )
 async def delete_lesson(
     lesson_id: int,
@@ -224,15 +210,19 @@ async def delete_lesson(
     db: AsyncSession = Depends(get_db),
 ) -> ResponseEnvelope[int]:
     """
+    ### Purpose
     Soft-delete a lesson owned by the current authenticated teacher.
 
-    Parameters:
-    lesson_id (int): Identifier of the lesson to delete.
-    user (UserDAO): The current authenticated teacher.
-    db (AsyncSession): Active database session.
+    ### Access
+    Available only to authenticated teachers.
 
-    Returns:
-    ResponseEnvelope[int]: The identifier of the lesson that was deleted.
+    ### Parameters
+    - **lesson_id** (int): Identifier of the lesson to delete.
+    - **user** (UserDAO): The current authenticated teacher.
+    - **db** (AsyncSession): Active database session.
+
+    ### Returns
+    - **ResponseEnvelope[int]**: The identifier of the lesson that was deleted.
     """
     logger.info(
         "Lesson deletion requested.",

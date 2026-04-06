@@ -45,29 +45,18 @@ def _validate_upload_input(
 @router.post(
     "/file_upload",
     response_model=ResponseEnvelope[FileUploadSchema],
-    summary="Upload file to object storage",
-    description=(
-        "Accepts a single file, validates filename, size and content type, "
-        "stores the object in S3-compatible storage and returns structured file "
-        "metadata with a temporary download URL. "
-        "This endpoint is intended as a reusable platform capability for other "
-        "domains such as homework and chat attachments."
-    ),
-    response_description=(
-        "Structured metadata of the stored file, including object key and "
-        "presigned download URL."
-    ),
 )
 async def upload_file(file: UploadFile) -> ResponseEnvelope[FileUploadSchema]:
     """
+    ### Purpose
     Upload a file into the shared storage layer.
 
-    Parameters:
-    file (UploadFile): The incoming file object provided by FastAPI.
+    ### Parameters
+    - **file** (UploadFile): The incoming file object provided by FastAPI.
 
-    Returns:
-    ResponseEnvelope[FileUploadSchema]: Structured metadata about the stored file,
-    including its object key and a temporary download URL.
+    ### Returns
+    - **ResponseEnvelope[FileUploadSchema]**: Structured metadata about the stored
+    file, including its object key and a temporary download URL.
     """
     try:
         file_content = await file.read()

@@ -26,33 +26,26 @@ PREFIX = "/relations"
 router = APIRouter(prefix=PREFIX, tags=["Relations"])
 
 
-@router.post(
-    "/create",
-    response_model=ResponseEnvelope[RelationGetSchema],
-    summary="Create teacher-student relation",
-    description=(
-        "Creates a relation between the current authenticated teacher and the "
-        "requested student. The endpoint rejects self-links, duplicate pairs and "
-        "invalid targets, and is the main entry point for establishing ownership "
-        "between both sides before lessons and homework are created."
-    ),
-    response_description="Created teacher-student relation.",
-)
+@router.post("/create", response_model=ResponseEnvelope[RelationGetSchema])
 async def create_relation(
     relation: RelationCreateSchema,
     user: UserDAO = Depends(get_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> ResponseEnvelope[RelationGetSchema]:
     """
+    ### Purpose
     Create a teacher-student relation for the current authenticated teacher.
 
-    Parameters:
-    relation (RelationCreateSchema): Payload with the target student identifier.
-    user (UserDAO): The current authenticated teacher.
-    db (AsyncSession): Active database session.
+    ### Access
+    Available only to authenticated teachers.
 
-    Returns:
-    ResponseEnvelope[RelationGetSchema]: The created teacher-student relation after
+    ### Parameters
+    - **relation** (RelationCreateSchema): Payload with the target student identifier.
+    - **user** (UserDAO): The current authenticated teacher.
+    - **db** (AsyncSession): Active database session.
+
+    ### Returns
+    - **ResponseEnvelope[RelationGetSchema]**: The created teacher-student relation after
     validation and duplicate checks succeed.
     """
     try:
@@ -85,13 +78,6 @@ async def create_relation(
 @router.get(
     "/students",
     response_model=ResponseEnvelope[list[RelationGetSchema]],
-    summary="List students of current teacher",
-    description=(
-        "Returns relation records for the current authenticated teacher. "
-        "By default only active relations are returned; `include_archived=true` "
-        "also includes archived pairs for history and diagnostics."
-    ),
-    response_description="Teacher-student relations visible to the current teacher.",
 )
 async def get_students(
     include_archived: bool = False,
@@ -99,16 +85,20 @@ async def get_students(
     db: AsyncSession = Depends(get_db),
 ) -> ResponseEnvelope[list[RelationGetSchema]]:
     """
+    ### Purpose
     List students linked to the current authenticated teacher.
 
-    Parameters:
-    include_archived (bool): Whether archived relations should be included.
-    user (UserDAO): The current authenticated teacher.
-    db (AsyncSession): Active database session.
+    ### Access
+    Available only to authenticated teachers.
 
-    Returns:
-    ResponseEnvelope[list[RelationGetSchema]]: Relation records visible to the
-    current teacher.
+    ### Parameters
+    - **include_archived** (bool): Whether archived relations should be included.
+    - **user** (UserDAO): The current authenticated teacher.
+    - **db** (AsyncSession): Active database session.
+
+    ### Returns
+    - **ResponseEnvelope[list[RelationGetSchema]]**: Relation records visible to
+    the current teacher.
     """
     relations = await list_students_for_teacher(
         db=db,
@@ -121,13 +111,6 @@ async def get_students(
 @router.get(
     "/teachers",
     response_model=ResponseEnvelope[list[RelationGetSchema]],
-    summary="List teachers of current student",
-    description=(
-        "Returns relation records for the current authenticated student. "
-        "By default only active relations are returned; `include_archived=true` "
-        "includes archived pairs as well."
-    ),
-    response_description="Teacher-student relations visible to the current student.",
 )
 async def get_teachers(
     include_archived: bool = False,
@@ -135,16 +118,20 @@ async def get_teachers(
     db: AsyncSession = Depends(get_db),
 ) -> ResponseEnvelope[list[RelationGetSchema]]:
     """
+    ### Purpose
     List teachers linked to the current authenticated student.
 
-    Parameters:
-    include_archived (bool): Whether archived relations should be included.
-    user (UserDAO): The current authenticated student.
-    db (AsyncSession): Active database session.
+    ### Access
+    Available only to authenticated students.
 
-    Returns:
-    ResponseEnvelope[list[RelationGetSchema]]: Relation records visible to the
-    current student.
+    ### Parameters
+    - **include_archived** (bool): Whether archived relations should be included.
+    - **user** (UserDAO): The current authenticated student.
+    - **db** (AsyncSession): Active database session.
+
+    ### Returns
+    - **ResponseEnvelope[list[RelationGetSchema]]**: Relation records visible to
+    the current student.
     """
     relations = await list_teachers_for_student(
         db=db,
@@ -157,14 +144,6 @@ async def get_teachers(
 @router.post(
     "/archive/{relation_id}",
     response_model=ResponseEnvelope[RelationGetSchema],
-    summary="Archive relation",
-    description=(
-        "Archives an existing teacher-student relation. "
-        "The operation is available to participants of the relation and marks "
-        "the pair as inactive without deleting the record, so history remains "
-        "available for authorization-aware workflows."
-    ),
-    response_description="Archived teacher-student relation.",
 )
 async def archive_relation(
     relation_id: int,
@@ -172,15 +151,19 @@ async def archive_relation(
     db: AsyncSession = Depends(get_db),
 ) -> ResponseEnvelope[RelationGetSchema]:
     """
+    ### Purpose
     Archive a teacher-student relation when the current user is a participant.
 
-    Parameters:
-    relation_id (int): Identifier of the relation to archive.
-    user (UserDAO): The current authenticated application user.
-    db (AsyncSession): Active database session.
+    ### Access
+    Available to authenticated users who participate in the relation.
 
-    Returns:
-    ResponseEnvelope[RelationGetSchema]: The archived relation record.
+    ### Parameters
+    - **relation_id** (int): Identifier of the relation to archive.
+    - **user** (UserDAO): The current authenticated application user.
+    - **db** (AsyncSession): Active database session.
+
+    ### Returns
+    - **ResponseEnvelope[RelationGetSchema]**: The archived relation record.
     """
     try:
         relation = await archive_relation_for_user(

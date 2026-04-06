@@ -62,7 +62,7 @@ services:
     networks:
       - pdp-network
     volumes:
-      - .:/work:ro
+      - .:/work:ro #needed for getting aws certificates which let communication with postgres
       - ./realm-export.json:/opt/keycloak/data/import/realm-export.json
     command: start --import-realm
     deploy:

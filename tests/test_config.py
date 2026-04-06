@@ -1,7 +1,20 @@
 from src.config import Settings
 
 
-def test_settings_use_safe_placeholder_defaults():
+def test_settings_use_safe_placeholder_defaults(monkeypatch):
+    for env_name in (
+        "POSTGRESQL_DSN",
+        "SECRET_KEY",
+        "SMTP_SERVER",
+        "SMTP_USER",
+        "SMTP_PASSWORD",
+        "MINIO_ROOT_USER",
+        "MINIO_ROOT_PASSWORD",
+        "AWS_POSTGRES_SECRET_ARN",
+        "KEYCLOAK_CLIENT_SECRET",
+    ):
+        monkeypatch.delenv(env_name, raising=False)
+
     settings = Settings(_env_file=None)
 
     assert (

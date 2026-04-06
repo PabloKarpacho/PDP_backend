@@ -14,7 +14,8 @@ services:
     environment:
       POSTGRESQL_DSN: ${DOCKER_POSTGRESQL_DSN}
       MINIO_ENDPOINT: ${DOCKER_MINIO_ENDPOINT}
-      KEYCLOAK_HOST_URL: ${DOCKER_KEYCLOAK_HOST_URL}
+      KEYCLOAK_HOST_URL: https://pdp-keycloak:8443
+      KEYCLOAK_PUBLIC_URL: https://${KC_HOSTNAME}:${KEYCLOAK_PORT}
     volumes:
       - .:/work
     networks:
@@ -29,7 +30,9 @@ services:
           memory: 128M
 
   pdp-keycloak:
-    image: quay.io/keycloak/keycloak:23.0.7
+    build:
+      context: .
+      dockerfile: Dockerfile_keycloak.dockerfile
     container_name: keycloak
     restart: always
     environment:
@@ -39,9 +42,12 @@ services:
       KC_DB_PASSWORD: ${KC_DB_PASSWORD}
       KC_DB_NAME: ${KC_DB_NAME}
       KC_HOSTNAME: ${KC_HOSTNAME}
-      KC_HOSTNAME_PORT: ${KC_HOSTNAME_PORT}
-      KC_HOSTNAME_STRICT: ${KC_HOSTNAME_STRICT}
-      KC_HOSTNAME_STRICT_HTTPS: ${KC_HOSTNAME_STRICT_HTTPS}
+      KC_HOSTNAME_PORT: ${KEYCLOAK_PORT}
+      KC_HOSTNAME_STRICT: "true"
+      KC_HOSTNAME_STRICT_HTTPS: "true"
+      KC_HTTP_ENABLED: "false"
+      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/cert.pem
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
       KC_LOG_LEVEL: ${KC_LOG_LEVEL}
       KC_METRICS_ENABLED: ${KC_METRICS_ENABLED}
       KC_HEALTH_ENABLED: ${KC_HEALTH_ENABLED}
@@ -49,15 +55,14 @@ services:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
     ports:
-      - "${KEYCLOAK_PORT}:8080"
+      - "${KEYCLOAK_PORT}:8443"
     env_file:
       - ".env"
     networks:
       - pdp-network
     volumes:
-      - .:/work:ro
       - ./realm-export.json:/opt/keycloak/data/import/realm-export.json
-    command: start-dev --http-enabled=true --import-realm
+    command: start --import-realm
     deploy:
       resources:
         limits:

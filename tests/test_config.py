@@ -12,6 +12,7 @@ def test_settings_use_safe_placeholder_defaults(monkeypatch):
         "MINIO_ROOT_PASSWORD",
         "AWS_POSTGRES_SECRET_ARN",
         "KEYCLOAK_CLIENT_SECRET",
+        "KEYCLOAK_CA_BUNDLE",
     ):
         monkeypatch.delenv(env_name, raising=False)
 
@@ -29,6 +30,7 @@ def test_settings_use_safe_placeholder_defaults(monkeypatch):
     assert settings.MINIO_ROOT_PASSWORD == "change-me"
     assert settings.AWS_POSTGRES_SECRET_ARN == ""
     assert settings.KEYCLOAK_CLIENT_SECRET == ""
+    assert settings.KEYCLOAK_CA_BUNDLE is None
 
 
 def test_settings_read_canonical_environment_variables(monkeypatch):
@@ -44,6 +46,7 @@ def test_settings_read_canonical_environment_variables(monkeypatch):
     monkeypatch.setenv("KEYCLOAK_HOST_URL", "https://idp.example.com")
     monkeypatch.setenv("KEYCLOAK_REALM", "example")
     monkeypatch.setenv("KEYCLOAK_CLIENT_ID", "backend-client")
+    monkeypatch.setenv("KEYCLOAK_CA_BUNDLE", "./certs/keycloak/cert.pem")
     monkeypatch.setenv("KEYCLOAK_ENABLE", "false")
 
     settings = Settings(_env_file=None)
@@ -58,4 +61,5 @@ def test_settings_read_canonical_environment_variables(monkeypatch):
     assert settings.KEYCLOAK_HOST_URL == "https://idp.example.com"
     assert settings.KEYCLOAK_REALM == "example"
     assert settings.KEYCLOAK_CLIENT_ID == "backend-client"
+    assert settings.KEYCLOAK_CA_BUNDLE == "./certs/keycloak/cert.pem"
     assert settings.KEYCLOAK_ENABLE is False

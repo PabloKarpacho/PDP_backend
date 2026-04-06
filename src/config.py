@@ -121,6 +121,10 @@ class Settings(BaseSettings):
         default="",
         alias="KEYCLOAK_CLIENT_SECRET",
     )
+    KEYCLOAK_CA_BUNDLE: str | None = Field(
+        default=None,
+        alias="KEYCLOAK_CA_BUNDLE",
+    )
     KEYCLOAK_ENABLE: bool = Field(default=True, alias="KEYCLOAK_ENABLE")
 
     @model_validator(mode="after")

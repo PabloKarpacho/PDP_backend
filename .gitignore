@@ -163,3 +163,17 @@ cython_debug/
 .idea/
 ai_code_helper.py
 data/
+certs/*.pem
+certs/*.crt
+certs/*.cer
+certs/*.key
+certs/backend/*.pem
+certs/backend/*.crt
+certs/backend/*.cer
+certs/backend/*.key
+certs/keycloak/*.pem
+certs/keycloak/*.crt
+certs/keycloak/*.cer
+certs/keycloak/*.key
+!certs/backend/.gitkeep
+!certs/keycloak/.gitkeep

@@ -9,8 +9,8 @@ ENV UV_LINK_MODE=copy
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 ENV UVICORN_SSL_MODE=true
-ENV UVICORN_SSL_CERTFILE=/opt/certs/cert.pem
-ENV UVICORN_SSL_KEYFILE=/opt/certs/key.pem
+ENV UVICORN_SSL_CERTFILE=/opt/certs/backend/cert.pem
+ENV UVICORN_SSL_KEYFILE=/opt/certs/backend/key.pem
 
 WORKDIR /work
 
@@ -30,10 +30,12 @@ COPY certs /opt/certs
 RUN chmod +x ./scripts/run-backend.sh
 
 RUN useradd --create-home appuser && \
+    mkdir -p /opt/certs/backend /opt/certs/keycloak && \
     chown -R appuser:appuser /work /opt/certs && \
-    chmod 755 /opt/certs && \
-    chmod 644 /opt/certs/cert.pem && \
-    chmod 600 /opt/certs/key.pem
+    chmod 755 /opt/certs /opt/certs/backend /opt/certs/keycloak && \
+    if [ -f /opt/certs/backend/cert.pem ]; then chmod 644 /opt/certs/backend/cert.pem; fi && \
+    if [ -f /opt/certs/backend/key.pem ]; then chmod 600 /opt/certs/backend/key.pem; fi && \
+    if [ -f /opt/certs/keycloak/cert.pem ]; then chmod 644 /opt/certs/keycloak/cert.pem; fi
 USER appuser
 
 EXPOSE 8000

@@ -16,6 +16,7 @@ services:
       MINIO_ENDPOINT: ${DOCKER_MINIO_ENDPOINT}
       KEYCLOAK_HOST_URL: https://pdp-keycloak:8443
       KEYCLOAK_PUBLIC_URL: https://${KC_HOSTNAME}:${KEYCLOAK_PORT}
+      KEYCLOAK_CA_BUNDLE: /opt/certs/keycloak/cert.pem
     volumes:
       - .:/work
     networks:

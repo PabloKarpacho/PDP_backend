@@ -25,15 +25,19 @@ class FakeS3Client:
         }
         self.error = error
 
-    async def upload_bytes(
+    async def upload_fileobj(
         self,
         *,
-        data,
+        fileobj,
         key,
         bucket_name,
         content_type=None,
         metadata=None,
+        size=None,
     ):
+        data = fileobj.read()
+        if hasattr(fileobj, "seek"):
+            fileobj.seek(0)
         self.calls.append(
             {
                 "data": data,
@@ -41,6 +45,7 @@ class FakeS3Client:
                 "bucket_name": bucket_name,
                 "content_type": content_type,
                 "metadata": metadata,
+                "size": size,
             }
         )
         if self.error is not None:
@@ -49,7 +54,7 @@ class FakeS3Client:
             bucket_name=bucket_name,
             key=key,
             content_type=content_type,
-            size=len(data),
+            size=size if size is not None else len(data),
             metadata=metadata,
         )
 
@@ -64,10 +69,12 @@ class FakeUploadFile:
         self.filename = filename
         self.content_type = content_type
         self.file = BytesIO(content)
+        self.bytes_read = 0
 
-    async def read(self):
-        self.file.seek(0)
-        return self.file.read()
+    async def read(self, size: int = -1):
+        chunk = self.file.read(size)
+        self.bytes_read += len(chunk)
+        return chunk
 
 
 def build_user():
@@ -107,6 +114,7 @@ async def test_upload_file_returns_structured_file_metadata(monkeypatch):
             "bucket_name": CONFIG.FILES_BUCKET_NAME,
             "content_type": "text/plain",
             "metadata": {"original_filename": "lesson.txt"},
+            "size": 7,
         }
     ]
 
@@ -114,6 +122,7 @@ async def test_upload_file_returns_structured_file_metadata(monkeypatch):
 @pytest.mark.asyncio
 async def test_upload_file_rejects_oversized_payload(monkeypatch):
     monkeypatch.setattr(files_router_module.CONFIG, "FILE_UPLOAD_MAX_BYTES", 4)
+    monkeypatch.setattr(files_router_module, "_UPLOAD_CHUNK_SIZE", 3)
     upload = FakeUploadFile(filename="lesson.txt", content=b"payload")
 
     with pytest.raises(HTTPException) as exc_info:
@@ -121,6 +130,7 @@ async def test_upload_file_rejects_oversized_payload(monkeypatch):
 
     assert exc_info.value.status_code == 400
     assert exc_info.value.detail == "File is too large"
+    assert upload.bytes_read == 6
 
 
 @pytest.mark.asyncio

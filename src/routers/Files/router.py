@@ -1,3 +1,5 @@
+from tempfile import SpooledTemporaryFile
+
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 
 from src.config import CONFIG
@@ -10,7 +12,11 @@ from src.dependencies import get_user
 from src.logger import logger
 from src.models import UserDAO
 from src.routers.Files.schemas import FileUploadSchema
-from src.routers.Files.utils import normalize_content_type, validate_upload_input
+from src.routers.Files.utils import (
+    normalize_content_type,
+    validate_upload_metadata,
+    validate_upload_size,
+)
 from src.schemas import ResponseEnvelope, success_response
 
 
@@ -18,6 +24,8 @@ PREFIX = "/files"
 
 
 router = APIRouter(prefix=PREFIX, tags=["Files"])
+
+_UPLOAD_CHUNK_SIZE = 1024 * 1024
 
 
 @router.post(
@@ -44,26 +52,38 @@ async def upload_file(
     file, including a short-lived download URL.
     """
     try:
-        file_content = await file.read()
         content_type = normalize_content_type(file.content_type)
-        safe_filename = validate_upload_input(
+        safe_filename = validate_upload_metadata(
             filename=file.filename,
             content_type=content_type,
-            size=len(file_content),
         )
         object_key = build_storage_object_key(
             filename=safe_filename,
             namespace="uploads",
         )
+        total_size = 0
 
-        s3_client = get_s3_client()
-        stored_object = await s3_client.upload_bytes(
-            data=file_content,
-            key=object_key,
-            bucket_name=CONFIG.FILES_BUCKET_NAME,
-            content_type=content_type,
-            metadata={"original_filename": safe_filename},
-        )
+        with SpooledTemporaryFile(max_size=_UPLOAD_CHUNK_SIZE, mode="w+b") as spool:
+            while True:
+                chunk = await file.read(_UPLOAD_CHUNK_SIZE)
+                if not chunk:
+                    break
+
+                total_size += len(chunk)
+                validate_upload_size(total_size)
+                spool.write(chunk)
+
+            spool.seek(0)
+
+            s3_client = get_s3_client()
+            stored_object = await s3_client.upload_fileobj(
+                fileobj=spool,
+                key=object_key,
+                bucket_name=CONFIG.FILES_BUCKET_NAME,
+                content_type=content_type,
+                metadata={"original_filename": safe_filename},
+                size=total_size,
+            )
         url = await s3_client.generate_presigned_download_url(
             key=stored_object.key,
             bucket_name=stored_object.bucket_name,

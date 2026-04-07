@@ -249,6 +249,53 @@ class S3:
             metadata=metadata,
         )
 
+    async def upload_fileobj(
+        self,
+        *,
+        fileobj: BinaryIO,
+        key: str,
+        bucket_name: str,
+        content_type: str | None = None,
+        metadata: dict[str, str] | None = None,
+        size: int | None = None,
+    ) -> StoredObject:
+        async with self._session.client("s3", **self._client_kwargs()) as s3:
+            extra_args = {}
+            if content_type:
+                extra_args["ContentType"] = content_type
+            if metadata:
+                extra_args["Metadata"] = metadata
+
+            logger.info(
+                "Uploading file object to S3: bucket={bucket_name}, key={key}".format(
+                    bucket_name=bucket_name,
+                    key=key,
+                )
+            )
+            try:
+                await s3.upload_fileobj(
+                    Fileobj=fileobj,
+                    Bucket=bucket_name,
+                    Key=key,
+                    ExtraArgs=extra_args if extra_args else None,
+                )
+            except StorageError:
+                raise
+            except Exception as error:
+                raise _translate_storage_error(
+                    error,
+                    "Failed to upload file object to storage",
+                ) from error
+
+        resolved_size = size if size is not None else 0
+        return StoredObject(
+            bucket_name=bucket_name,
+            key=key,
+            content_type=content_type,
+            size=resolved_size,
+            metadata=metadata,
+        )
+
     async def delete_file(
         self,
         key: str,

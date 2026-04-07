@@ -119,15 +119,19 @@ def test_users_me_endpoint_uses_success_envelope(client: TestClient):
 
 def test_files_upload_endpoint_uses_success_envelope(client: TestClient, monkeypatch):
     class FakeS3Client:
-        async def upload_bytes(
+        async def upload_fileobj(
             self,
             *,
-            data,
+            fileobj,
             key,
             bucket_name,
             content_type=None,
             metadata=None,
+            size=None,
         ):
+            data = fileobj.read()
+            if hasattr(fileobj, "seek"):
+                fileobj.seek(0)
             return type(
                 "StoredObject",
                 (),
@@ -135,7 +139,7 @@ def test_files_upload_endpoint_uses_success_envelope(client: TestClient, monkeyp
                     "bucket_name": bucket_name,
                     "key": key,
                     "content_type": content_type,
-                    "size": len(data),
+                    "size": size if size is not None else len(data),
                 },
             )()
 

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
 
 from src.config import CONFIG
 from src.database_control.s3 import (
@@ -6,7 +6,9 @@ from src.database_control.s3 import (
     get_s3_client,
     StorageError,
 )
+from src.dependencies import get_user
 from src.logger import logger
+from src.models import UserDAO
 from src.routers.Files.schemas import FileUploadSchema
 from src.routers.Files.utils import normalize_content_type, validate_upload_input
 from src.schemas import ResponseEnvelope, success_response
@@ -22,17 +24,24 @@ router = APIRouter(prefix=PREFIX, tags=["Files"])
     "/file_upload",
     response_model=ResponseEnvelope[FileUploadSchema],
 )
-async def upload_file(file: UploadFile) -> ResponseEnvelope[FileUploadSchema]:
+async def upload_file(
+    file: UploadFile,
+    user: UserDAO = Depends(get_user),
+) -> ResponseEnvelope[FileUploadSchema]:
     """
     ### Purpose
     Upload a file into the shared storage layer.
 
+    ### Access
+    Available to any authenticated application user.
+
     ### Parameters
     - **file** (UploadFile): The incoming file object provided by FastAPI.
+    - **user** (UserDAO): The current authenticated application user.
 
     ### Returns
     - **ResponseEnvelope[FileUploadSchema]**: Structured metadata about the stored
-    file, including its object key and a temporary download URL.
+    file, including a short-lived download URL.
     """
     try:
         file_content = await file.read()
@@ -63,9 +72,7 @@ async def upload_file(file: UploadFile) -> ResponseEnvelope[FileUploadSchema]:
 
         return success_response(
             FileUploadSchema(
-                url=url,
-                key=stored_object.key,
-                bucket_name=stored_object.bucket_name,
+                download_url=url,
                 original_filename=safe_filename,
                 content_type=stored_object.content_type or content_type,
                 size=stored_object.size,
@@ -75,8 +82,14 @@ async def upload_file(file: UploadFile) -> ResponseEnvelope[FileUploadSchema]:
     except HTTPException:
         raise
     except StorageError as error:
-        logger.error(f"File upload failed due to storage error: {error}")
+        logger.error(
+            "File upload failed due to storage error.",
+            extra={"user_id": user.id},
+        )
         raise HTTPException(status_code=500, detail="File upload failed") from error
     except Exception as error:
-        logger.error(f"File upload failed: {error}")
+        logger.error(
+            "File upload failed.",
+            extra={"user_id": user.id, "error_type": type(error).__name__},
+        )
         raise HTTPException(status_code=500, detail="File upload failed") from error

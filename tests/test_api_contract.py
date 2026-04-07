@@ -145,6 +145,7 @@ def test_files_upload_endpoint_uses_success_envelope(client: TestClient, monkeyp
             return "https://example.com/file"
 
     monkeypatch.setattr(files_router_module, "get_s3_client", lambda: FakeS3Client())
+    app.dependency_overrides[get_user] = lambda: build_user()
 
     response = client.post(
         "/files/file_upload",
@@ -156,9 +157,7 @@ def test_files_upload_endpoint_uses_success_envelope(client: TestClient, monkeyp
     assert response.json()["error"] is None
     assert response.json()["meta"] == {"pagination": None}
     assert response.json()["data"] == {
-        "url": "https://example.com/file",
-        "key": response.json()["data"]["key"],
-        "bucket_name": files_router_module.CONFIG.FILES_BUCKET_NAME,
+        "download_url": "https://example.com/file",
         "original_filename": "lesson.txt",
         "content_type": "text/plain",
         "size": 7,
@@ -193,16 +192,16 @@ def test_validation_errors_use_shared_error_envelope(client: TestClient, monkeyp
     }
 
 
-def test_request_validation_handler_uses_shared_error_envelope(client: TestClient):
+def test_files_upload_endpoint_rejects_anonymous_requests(client: TestClient):
     response = client.post("/files/file_upload")
 
-    assert response.status_code == 400
+    assert response.status_code == 401
     body = response.json()
     assert body["success"] is False
     assert body["data"] is None
-    assert body["error"]["code"] == "bad_request"
-    assert body["error"]["message"] == "Request validation failed"
-    assert isinstance(body["error"]["details"], list)
+    assert body["error"]["code"] == "unauthorized"
+    assert body["error"]["message"] == "Not authenticated"
+    assert body["error"]["details"] is None
     assert body["meta"] == {"pagination": None}
 
 

@@ -5,6 +5,7 @@ import pytest
 from fastapi import HTTPException
 
 from src.config import CONFIG
+from src.constants import Roles
 
 
 files_router_module = importlib.import_module("src.routers.Files.router")
@@ -69,6 +70,17 @@ class FakeUploadFile:
         return self.file.read()
 
 
+def build_user():
+    return type(
+        "User",
+        (),
+        {
+            "id": "user-1",
+            "role": Roles.TEACHER,
+        },
+    )()
+
+
 @pytest.mark.asyncio
 async def test_upload_file_returns_structured_file_metadata(monkeypatch):
     fake_client = FakeS3Client()
@@ -79,14 +91,12 @@ async def test_upload_file_returns_structured_file_metadata(monkeypatch):
 
     upload = FakeUploadFile(filename="lesson.txt", content=b"payload")
 
-    result = await files_router_module.upload_file(upload)
+    result = await files_router_module.upload_file(upload, user=build_user())
 
     assert result.success is True
     assert result.error is None
     assert result.meta.pagination is None
-    assert result.data.url == "https://example.com/file"
-    assert result.data.key == "safe/key.txt"
-    assert result.data.bucket_name == CONFIG.FILES_BUCKET_NAME
+    assert result.data.download_url == "https://example.com/file"
     assert result.data.original_filename == "lesson.txt"
     assert result.data.content_type == "text/plain"
     assert result.data.size == 7
@@ -107,7 +117,7 @@ async def test_upload_file_rejects_oversized_payload(monkeypatch):
     upload = FakeUploadFile(filename="lesson.txt", content=b"payload")
 
     with pytest.raises(HTTPException) as exc_info:
-        await files_router_module.upload_file(upload)
+        await files_router_module.upload_file(upload, user=build_user())
 
     assert exc_info.value.status_code == 400
     assert exc_info.value.detail == "File is too large"
@@ -127,7 +137,7 @@ async def test_upload_file_rejects_disallowed_content_type(monkeypatch):
     )
 
     with pytest.raises(HTTPException) as exc_info:
-        await files_router_module.upload_file(upload)
+        await files_router_module.upload_file(upload, user=build_user())
 
     assert exc_info.value.status_code == 400
     assert exc_info.value.detail == "Unsupported file content type"
@@ -144,7 +154,7 @@ async def test_upload_file_normalizes_storage_errors(monkeypatch):
     upload = FakeUploadFile(filename="lesson.txt", content=b"payload")
 
     with pytest.raises(HTTPException) as exc_info:
-        await files_router_module.upload_file(upload)
+        await files_router_module.upload_file(upload, user=build_user())
 
     assert exc_info.value.status_code == 500
     assert exc_info.value.detail == "File upload failed"

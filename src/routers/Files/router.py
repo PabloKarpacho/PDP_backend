@@ -13,7 +13,10 @@ from src.logger import logger
 from src.models import UserDAO
 from src.routers.Files.schemas import FileUploadSchema
 from src.routers.Files.utils import (
+    detect_content_type,
     normalize_content_type,
+    should_validate_content_sample,
+    validate_detected_content_type,
     validate_upload_metadata,
     validate_upload_size,
 )
@@ -62,6 +65,8 @@ async def upload_file(
             namespace="uploads",
         )
         total_size = 0
+        sample = bytearray()
+        validated_content_type: str | None = None
 
         with SpooledTemporaryFile(max_size=_UPLOAD_CHUNK_SIZE, mode="w+b") as spool:
             while True:
@@ -71,7 +76,25 @@ async def upload_file(
 
                 total_size += len(chunk)
                 validate_upload_size(total_size)
+                if len(sample) < CONFIG.FILE_UPLOAD_SNIFF_BYTES:
+                    remaining = CONFIG.FILE_UPLOAD_SNIFF_BYTES - len(sample)
+                    sample.extend(chunk[:remaining])
+
+                if validated_content_type is None and should_validate_content_sample(
+                    sample=bytes(sample),
+                    reached_eof=False,
+                ):
+                    validated_content_type = validate_detected_content_type(
+                        declared_content_type=content_type,
+                        detected_content_type=detect_content_type(bytes(sample)),
+                    )
                 spool.write(chunk)
+
+            if validated_content_type is None:
+                validated_content_type = validate_detected_content_type(
+                    declared_content_type=content_type,
+                    detected_content_type=detect_content_type(bytes(sample)),
+                )
 
             spool.seek(0)
 
@@ -80,7 +103,7 @@ async def upload_file(
                 fileobj=spool,
                 key=object_key,
                 bucket_name=CONFIG.FILES_BUCKET_NAME,
-                content_type=content_type,
+                content_type=validated_content_type,
                 metadata={"original_filename": safe_filename},
                 size=total_size,
             )
@@ -94,7 +117,7 @@ async def upload_file(
             FileUploadSchema(
                 download_url=url,
                 original_filename=safe_filename,
-                content_type=stored_object.content_type or content_type,
+                content_type=stored_object.content_type or validated_content_type,
                 size=stored_object.size,
             )
         )

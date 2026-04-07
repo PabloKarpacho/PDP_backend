@@ -96,7 +96,10 @@ class Settings(BaseSettings):
         "image/webp",
         "application/pdf",
         "text/plain",
-        "application/octet-stream",
+    )
+    FILE_UPLOAD_SNIFF_BYTES: int = Field(
+        default=4096,
+        alias="FILE_UPLOAD_SNIFF_BYTES",
     )
     FILE_UPLOAD_URL_EXPIRY_SECONDS: int = Field(
         default=3600,

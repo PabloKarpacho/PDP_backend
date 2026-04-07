@@ -120,6 +120,29 @@ async def test_upload_file_returns_structured_file_metadata(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_upload_file_accepts_pdf_when_declared_type_matches_detected_type(
+    monkeypatch,
+):
+    fake_client = FakeS3Client()
+    monkeypatch.setattr(files_router_module, "get_s3_client", lambda: fake_client)
+    monkeypatch.setattr(
+        files_router_module, "build_storage_object_key", lambda **kwargs: "safe/key.pdf"
+    )
+
+    upload = FakeUploadFile(
+        filename="lesson.pdf",
+        content=b"%PDF-1.7\n%test pdf",
+        content_type="application/pdf",
+    )
+
+    result = await files_router_module.upload_file(upload, user=build_user())
+
+    assert result.success is True
+    assert result.data.content_type == "application/pdf"
+    assert fake_client.calls[0]["content_type"] == "application/pdf"
+
+
+@pytest.mark.asyncio
 async def test_upload_file_rejects_oversized_payload(monkeypatch):
     monkeypatch.setattr(files_router_module.CONFIG, "FILE_UPLOAD_MAX_BYTES", 4)
     monkeypatch.setattr(files_router_module, "_UPLOAD_CHUNK_SIZE", 3)
@@ -131,6 +154,53 @@ async def test_upload_file_rejects_oversized_payload(monkeypatch):
     assert exc_info.value.status_code == 400
     assert exc_info.value.detail == "File is too large"
     assert upload.bytes_read == 6
+
+
+@pytest.mark.asyncio
+async def test_upload_file_rejects_application_octet_stream_declared_type(monkeypatch):
+    upload = FakeUploadFile(
+        filename="lesson.bin",
+        content=b"%PDF-1.7\n%test pdf",
+        content_type="application/octet-stream",
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await files_router_module.upload_file(upload, user=build_user())
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "Unsupported file content type"
+
+
+@pytest.mark.asyncio
+async def test_upload_file_rejects_mismatched_declared_and_detected_content_type(
+    monkeypatch,
+):
+    upload = FakeUploadFile(
+        filename="lesson.txt",
+        content=b"\x89PNG\r\n\x1a\nrest-of-png",
+        content_type="text/plain",
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await files_router_module.upload_file(upload, user=build_user())
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "Declared file content type does not match content"
+
+
+@pytest.mark.asyncio
+async def test_upload_file_rejects_binary_payload_declared_as_text_plain(monkeypatch):
+    upload = FakeUploadFile(
+        filename="lesson.txt",
+        content=b"\x00\x01\x02\x03binary",
+        content_type="text/plain",
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await files_router_module.upload_file(upload, user=build_user())
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "Unsupported file content type"
 
 
 @pytest.mark.asyncio

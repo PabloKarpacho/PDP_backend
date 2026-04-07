@@ -9,9 +9,9 @@ import uuid
 import aioboto3
 from aiobotocore.config import AioConfig
 from botocore.exceptions import NoCredentialsError
-from loguru import logger
 
 from src.config import CONFIG
+from src.logger import logger
 
 
 _FILENAME_SAFE_CHARS_PATTERN = re.compile(r"[^a-z0-9]+")
@@ -76,6 +76,7 @@ def build_storage_object_key(
     *,
     filename: str | None,
     namespace: str = "uploads",
+    owner_scope: str | None = None,
 ) -> str:
     safe_filename = sanitize_storage_filename(filename)
     stem, dot, suffix = safe_filename.rpartition(".")
@@ -87,12 +88,18 @@ def build_storage_object_key(
         "-", namespace.strip().lower()
     ).strip("-")
     safe_namespace = safe_namespace or "uploads"
+    safe_owner_scope = _FILENAME_SAFE_CHARS_PATTERN.sub(
+        "-", (owner_scope or "").strip().lower()
+    ).strip("-")
     collision_suffix = str(uuid.uuid4()).split("-")[0]
+    prefix = (
+        f"{safe_namespace}/{safe_owner_scope}" if safe_owner_scope else safe_namespace
+    )
 
     if suffix:
-        return f"{safe_namespace}/{stem}-{collision_suffix}.{suffix}"
+        return f"{prefix}/{stem}-{collision_suffix}.{suffix}"
 
-    return f"{safe_namespace}/{stem}-{collision_suffix}"
+    return f"{prefix}/{stem}-{collision_suffix}"
 
 
 class S3:
@@ -131,9 +138,9 @@ class S3:
 
             if bucket_name not in bucket_names:
                 await s3.create_bucket(Bucket=bucket_name)
-                logger.info(f"Created S3 bucket: {bucket_name}")
+                logger.info("Created S3 bucket.")
             else:
-                logger.info(f"S3 bucket already exists: {bucket_name}")
+                logger.info("S3 bucket already exists.")
 
     async def put_bucket_lifecycle_configuration(
         self,
@@ -161,13 +168,7 @@ class S3:
         file_id: str | None = None,
     ) -> str:
         async with self._session.client("s3", **self._client_kwargs()) as s3:
-            logger.info(
-                "Uploading file to S3: bucket={bucket_name}, key={key}, file_id={file_id}".format(
-                    bucket_name=bucket_name,
-                    key=key,
-                    file_id=file_id,
-                )
-            )
+            logger.info("Uploading file to storage.")
 
             extra_args = {}
             if file_id:
@@ -220,12 +221,7 @@ class S3:
             if metadata:
                 extra_args["Metadata"] = metadata
 
-            logger.info(
-                "Uploading bytes to S3: bucket={bucket_name}, key={key}".format(
-                    bucket_name=bucket_name,
-                    key=key,
-                )
-            )
+            logger.info("Uploading bytes to storage.")
             try:
                 await s3.upload_fileobj(
                     Fileobj=BytesIO(data),
@@ -266,12 +262,7 @@ class S3:
             if metadata:
                 extra_args["Metadata"] = metadata
 
-            logger.info(
-                "Uploading file object to S3: bucket={bucket_name}, key={key}".format(
-                    bucket_name=bucket_name,
-                    key=key,
-                )
-            )
+            logger.info("Uploading file object to storage.")
             try:
                 await s3.upload_fileobj(
                     Fileobj=fileobj,
@@ -302,12 +293,7 @@ class S3:
         bucket_name: str,
     ) -> None:
         async with self._session.client("s3", **self._client_kwargs()) as s3:
-            logger.info(
-                "Deleting file from S3: bucket={bucket_name}, key={key}".format(
-                    bucket_name=bucket_name,
-                    key=key,
-                )
-            )
+            logger.info("Deleting file from storage.")
 
             try:
                 await s3.delete_object(
@@ -322,12 +308,7 @@ class S3:
                     "Failed to delete file from storage",
                 ) from error
 
-            logger.info(
-                "File deleted from S3: bucket={bucket_name}, key={key}".format(
-                    bucket_name=bucket_name,
-                    key=key,
-                )
-            )
+            logger.info("File deleted from storage.")
 
     async def generate_presigned_download_url(
         self,
@@ -358,12 +339,7 @@ class S3:
         bucket_name: str,
     ) -> tuple[bytes, str | None]:
         async with self._session.client("s3", **self._client_kwargs()) as s3:
-            logger.info(
-                "Downloading file from S3: bucket={bucket_name}, key={key}".format(
-                    bucket_name=bucket_name,
-                    key=key,
-                )
-            )
+            logger.info("Downloading file from storage.")
             try:
                 response = await s3.get_object(
                     Bucket=bucket_name,

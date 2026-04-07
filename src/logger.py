@@ -16,6 +16,11 @@ _SENSITIVE_FIELD_MARKERS = (
     "cookie",
     "client_secret",
     "smtp_password",
+    "bucket_name",
+    "object_key",
+    "storage_key",
+    "download_url",
+    "presigned_url",
 )
 _BEARER_TOKEN_PATTERN = re.compile(r"(?i)(bearer\s+)[^\s\"']+")
 _ASSIGNMENT_SECRET_PATTERN = re.compile(r"(?i)\b(password|secret|token)=([^\s&]+)")

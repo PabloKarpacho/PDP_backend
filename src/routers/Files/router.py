@@ -54,6 +54,10 @@ async def upload_file(
     - **ResponseEnvelope[FileUploadSchema]**: Structured metadata about the stored
     file, including a short-lived download URL.
     """
+    logger.info(
+        "File upload requested.",
+        extra={"user_id": user.id},
+    )
     try:
         content_type = normalize_content_type(file.content_type)
         safe_filename = validate_upload_metadata(
@@ -63,6 +67,7 @@ async def upload_file(
         object_key = build_storage_object_key(
             filename=safe_filename,
             namespace="uploads",
+            owner_scope=user.id,
         )
         total_size = 0
         sample = bytearray()
@@ -112,6 +117,14 @@ async def upload_file(
             bucket_name=stored_object.bucket_name,
             url_expiry=CONFIG.FILE_UPLOAD_URL_EXPIRY_SECONDS,
         )
+        logger.info(
+            "File upload succeeded.",
+            extra={
+                "user_id": user.id,
+                "content_type": validated_content_type,
+                "size": stored_object.size,
+            },
+        )
 
         return success_response(
             FileUploadSchema(
@@ -122,17 +135,24 @@ async def upload_file(
             )
         )
 
-    except HTTPException:
+    except HTTPException as error:
+        if error.status_code == 400:
+            logger.info(
+                "File upload rejected.",
+                extra={
+                    "user_id": user.id,
+                    "http_status_code": 400,
+                    "error_type": "invalid_file",
+                },
+            )
         raise
     except StorageError as error:
         logger.error(
-            "File upload failed due to storage error.",
-            extra={"user_id": user.id},
-        )
-        raise HTTPException(status_code=500, detail="File upload failed") from error
-    except Exception as error:
-        logger.error(
-            "File upload failed.",
-            extra={"user_id": user.id, "error_type": type(error).__name__},
+            "File upload failed due to storage backend error.",
+            extra={
+                "user_id": user.id,
+                "http_status_code": 500,
+                "error_type": "storage_failure",
+            },
         )
         raise HTTPException(status_code=500, detail="File upload failed") from error

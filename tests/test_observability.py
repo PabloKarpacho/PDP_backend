@@ -45,12 +45,18 @@ def test_sanitize_log_data_redacts_sensitive_values():
             "authorization": "Bearer secret-token",
             "nested": {"password": "plain-text"},
             "dsn": "postgresql://user:secret@localhost:5432/pdp",
+            "bucket_name": "pdp-files",
+            "object_key": "uploads/user-1/file.pdf",
+            "download_url": "https://storage.example.com/presigned",
         }
     )
 
     assert sanitized["authorization"] == "[REDACTED]"
     assert sanitized["nested"]["password"] == "[REDACTED]"
     assert sanitized["dsn"] == "postgresql://user:[REDACTED]@localhost:5432/pdp"
+    assert sanitized["bucket_name"] == "[REDACTED]"
+    assert sanitized["object_key"] == "[REDACTED]"
+    assert sanitized["download_url"] == "[REDACTED]"
 
 
 def test_middleware_propagates_request_id_to_response_and_logs(monkeypatch):

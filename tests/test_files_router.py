@@ -12,6 +12,18 @@ files_router_module = importlib.import_module("src.routers.Files.router")
 s3_db_module = importlib.import_module("src.database_control.s3.db")
 
 
+class FakeLogger:
+    def __init__(self) -> None:
+        self.info_messages: list[tuple[str, dict | None]] = []
+        self.error_messages: list[tuple[str, dict | None]] = []
+
+    def info(self, message: str, extra: dict | None = None) -> None:
+        self.info_messages.append((message, extra))
+
+    def error(self, message: str, extra: dict | None = None) -> None:
+        self.error_messages.append((message, extra))
+
+
 class FakeS3Client:
     def __init__(self, *, response=None, error: Exception | None = None):
         self.calls = []
@@ -91,11 +103,9 @@ def build_user():
 @pytest.mark.asyncio
 async def test_upload_file_returns_structured_file_metadata(monkeypatch):
     fake_client = FakeS3Client()
+    fake_logger = FakeLogger()
     monkeypatch.setattr(files_router_module, "get_s3_client", lambda: fake_client)
-    monkeypatch.setattr(
-        files_router_module, "build_storage_object_key", lambda **kwargs: "safe/key.txt"
-    )
-
+    monkeypatch.setattr(files_router_module, "logger", fake_logger)
     upload = FakeUploadFile(filename="lesson.txt", content=b"payload")
 
     result = await files_router_module.upload_file(upload, user=build_user())
@@ -107,16 +117,28 @@ async def test_upload_file_returns_structured_file_metadata(monkeypatch):
     assert result.data.original_filename == "lesson.txt"
     assert result.data.content_type == "text/plain"
     assert result.data.size == 7
+    assert fake_client.calls[0]["key"].startswith("uploads/user-1/")
     assert fake_client.calls == [
         {
             "data": b"payload",
-            "key": "safe/key.txt",
+            "key": fake_client.calls[0]["key"],
             "bucket_name": CONFIG.FILES_BUCKET_NAME,
             "content_type": "text/plain",
             "metadata": {"original_filename": "lesson.txt"},
             "size": 7,
         }
     ]
+    assert fake_logger.info_messages[0] == (
+        "File upload requested.",
+        {"user_id": "user-1"},
+    )
+    assert fake_logger.info_messages[-1] == (
+        "File upload succeeded.",
+        {"user_id": "user-1", "content_type": "text/plain", "size": 7},
+    )
+    assert "download_url" not in str(fake_logger.info_messages)
+    assert "bucket_name" not in str(fake_logger.info_messages)
+    assert "uploads/user-1/" not in str(fake_logger.info_messages)
 
 
 @pytest.mark.asyncio
@@ -125,9 +147,6 @@ async def test_upload_file_accepts_pdf_when_declared_type_matches_detected_type(
 ):
     fake_client = FakeS3Client()
     monkeypatch.setattr(files_router_module, "get_s3_client", lambda: fake_client)
-    monkeypatch.setattr(
-        files_router_module, "build_storage_object_key", lambda **kwargs: "safe/key.pdf"
-    )
 
     upload = FakeUploadFile(
         filename="lesson.pdf",
@@ -139,6 +158,7 @@ async def test_upload_file_accepts_pdf_when_declared_type_matches_detected_type(
 
     assert result.success is True
     assert result.data.content_type == "application/pdf"
+    assert fake_client.calls[0]["key"].startswith("uploads/user-1/")
     assert fake_client.calls[0]["content_type"] == "application/pdf"
 
 
@@ -226,10 +246,9 @@ async def test_upload_file_rejects_disallowed_content_type(monkeypatch):
 @pytest.mark.asyncio
 async def test_upload_file_normalizes_storage_errors(monkeypatch):
     fake_client = FakeS3Client(error=s3_db_module.StorageError("storage down"))
+    fake_logger = FakeLogger()
     monkeypatch.setattr(files_router_module, "get_s3_client", lambda: fake_client)
-    monkeypatch.setattr(
-        files_router_module, "build_storage_object_key", lambda **kwargs: "safe/key.txt"
-    )
+    monkeypatch.setattr(files_router_module, "logger", fake_logger)
 
     upload = FakeUploadFile(filename="lesson.txt", content=b"payload")
 
@@ -238,19 +257,32 @@ async def test_upload_file_normalizes_storage_errors(monkeypatch):
 
     assert exc_info.value.status_code == 500
     assert exc_info.value.detail == "File upload failed"
+    assert fake_logger.error_messages == [
+        (
+            "File upload failed due to storage backend error.",
+            {
+                "user_id": "user-1",
+                "http_status_code": 500,
+                "error_type": "storage_failure",
+            },
+        )
+    ]
+    assert "storage down" not in str(fake_logger.error_messages)
+    assert "uploads/user-1/" not in str(fake_logger.error_messages)
 
 
-def test_build_storage_object_key_sanitizes_name_and_adds_collision_safe_suffix(
+def test_build_storage_object_key_is_user_scoped_and_adds_collision_safe_suffix(
     monkeypatch,
 ):
     monkeypatch.setattr(s3_db_module.uuid, "uuid4", lambda: "abc12345-fixed")
 
     key = s3_db_module.build_storage_object_key(
         filename="../../Lesson Plan 01!!.PDF",
-        namespace="homework",
+        namespace="uploads",
+        owner_scope="user-1",
     )
 
-    assert key == "homework/lesson-plan-01-abc12345.pdf"
+    assert key == "uploads/user-1/lesson-plan-01-abc12345.pdf"
 
 
 def test_build_storage_object_key_uses_fallback_name_when_filename_is_empty(
@@ -260,7 +292,8 @@ def test_build_storage_object_key_uses_fallback_name_when_filename_is_empty(
 
     key = s3_db_module.build_storage_object_key(
         filename="   ",
-        namespace="chat",
+        namespace="uploads",
+        owner_scope="student-1",
     )
 
-    assert key == "chat/file-feedface"
+    assert key == "uploads/student-1/file-feedface"

@@ -9,6 +9,10 @@ from src.auth import get_user_info
 from src.constants import LessonStatuses, Roles
 from src.database_control.postgres import get_db
 from src.schemas import KeycloakUser
+import importlib
+
+
+files_router_module = importlib.import_module("src.routers.Files.router")
 
 
 class FakeExecuteResult:
@@ -116,4 +120,64 @@ def test_user_endpoint_forbids_roleless_user_on_owned_resource(client: TestClien
         "code": "forbidden",
         "message": "Forbidden",
         "details": None,
+    }
+
+
+def test_files_upload_allows_authenticated_user_without_supported_role(
+    client: TestClient, monkeypatch
+):
+    class FakeS3Client:
+        async def upload_fileobj(
+            self,
+            *,
+            fileobj,
+            key,
+            bucket_name,
+            content_type=None,
+            metadata=None,
+            size=None,
+        ):
+            data = fileobj.read()
+            if hasattr(fileobj, "seek"):
+                fileobj.seek(0)
+            return type(
+                "StoredObject",
+                (),
+                {
+                    "bucket_name": bucket_name,
+                    "key": key,
+                    "content_type": content_type,
+                    "size": size if size is not None else len(data),
+                },
+            )()
+
+        async def generate_presigned_download_url(
+            self, *, key, bucket_name, url_expiry=3600
+        ):
+            return "https://example.com/file"
+
+    session = FakeAsyncSession(existing_user=None)
+    app.dependency_overrides[get_db] = lambda: session
+    app.dependency_overrides[get_user_info] = lambda: KeycloakUser(
+        id="user-1",
+        username="user",
+        email="user@example.com",
+        last_name="User",
+        role=Roles.TEACHER,
+        realm_roles=["admin"],
+    )
+    monkeypatch.setattr(files_router_module, "get_s3_client", lambda: FakeS3Client())
+
+    response = client.post(
+        "/files/file_upload",
+        files={"file": ("lesson.txt", b"payload", "text/plain")},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    assert response.json()["data"] == {
+        "download_url": "https://example.com/file",
+        "original_filename": "lesson.txt",
+        "content_type": "text/plain",
+        "size": 7,
     }

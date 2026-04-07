@@ -117,6 +117,8 @@ async def test_upload_file_returns_structured_file_metadata(monkeypatch):
     assert result.data.original_filename == "lesson.txt"
     assert result.data.content_type == "text/plain"
     assert result.data.size == 7
+    assert not hasattr(result.data, "bucket_name")
+    assert not hasattr(result.data, "key")
     assert fake_client.calls[0]["key"].startswith("uploads/user-1/")
     assert fake_client.calls == [
         {

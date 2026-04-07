@@ -166,6 +166,8 @@ def test_files_upload_endpoint_uses_success_envelope(client: TestClient, monkeyp
         "content_type": "text/plain",
         "size": 7,
     }
+    assert "bucket_name" not in response.json()["data"]
+    assert "key" not in response.json()["data"]
 
 
 def test_validation_errors_use_shared_error_envelope(client: TestClient, monkeypatch):

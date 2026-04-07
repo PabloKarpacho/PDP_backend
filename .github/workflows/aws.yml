@@ -2,21 +2,57 @@ name: Deploy to ECS
 on:
   push:
     branches:
-      - develop
+      branches: [ "**" ]
     tags:
       - 'v*.*.*'
+
 jobs:
   test:
     runs-on: ubuntu-latest
-    container:
-      image: node:22-alpine
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: pdp
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d pdp"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      POSTGRESQL_DSN: postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/pdp
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
       - name: Install dependencies
-        run: npm install
-      - name: Run tests
-        run: npm test
+        run: uv sync --frozen --no-dev
+
+      - name: Run Alembic migrations
+        run: uv run python -m alembic upgrade head
+
+      - name: Compile project
+        run: uv run python -m compileall src tests __init__.py
+
+      - name: Run unit tests
+        run: uv run python -m pytest --cov --cov-branch --cov-report=xml tests
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
   build-and-push:
     needs: test
     runs-on: ubuntu-latest
@@ -44,7 +80,7 @@ jobs:
           docker push ${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG
   deploy-staging:
     needs: build-and-push
-    if: github.ref == 'refs/heads/develop'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

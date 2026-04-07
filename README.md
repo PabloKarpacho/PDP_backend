@@ -144,6 +144,7 @@ uv run pre-commit install
 uv run pre-commit run --all-files
 ```
 
+
 Хуки используют `ruff check --fix` и `ruff format`
 
 ## Примечание

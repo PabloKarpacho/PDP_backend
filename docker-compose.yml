@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   pdp-db:
@@ -10,7 +10,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_MULTIPLE_DATABASES: ${KC_DB_NAME}, ${POSTGRES_DB}
     ports:
-      - '${POSTGRES_PORT}:${POSTGRES_PORT}'
+      - "${POSTGRES_PORT}:${POSTGRES_PORT}"
     env_file:
       - ".env"
     volumes:
@@ -20,10 +20,10 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.25'
+          cpus: "0.25"
           memory: 256M
         reservations:
-          cpus: '0.1'
+          cpus: "0.1"
           memory: 128M
 
   pdp-minio:
@@ -46,10 +46,10 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.4'
+          cpus: "0.4"
           memory: 320M
         reservations:
-          cpus: '0.2'
+          cpus: "0.2"
           memory: 160M
 
   pdp-backend:
@@ -77,10 +77,10 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.25'
+          cpus: "0.25"
           memory: 256M
         reservations:
-          cpus: '0.1'
+          cpus: "0.1"
           memory: 128M
 
   pdp-keycloak:
@@ -113,14 +113,15 @@ services:
       - pdp-network
     volumes:
       - ./realm-export.json:/opt/keycloak/data/import/realm-export.json
+      - ./themes:/opt/keycloak/themes
     command: start-dev --http-enabled=true --import-realm
-    deploy: 
-      resources: 
-        limits: 
-          cpus: '0.7' 
-          memory: 768M 
-        reservations: 
-          cpus: '0.3' 
+    deploy:
+      resources:
+        limits:
+          cpus: "0.7"
+          memory: 768M
+        reservations:
+          cpus: "0.3"
           memory: 512M
 
 networks:

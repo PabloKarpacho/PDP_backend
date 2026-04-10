@@ -76,7 +76,7 @@ async def ensure_aws_credentials_ready() -> None:
 
 async def run_startup_tasks() -> None:
     if CONFIG.STORAGE_BACKEND == "aws":
-        await ensure_aws_credentials_ready()
+        # await ensure_aws_credentials_ready()
         return
 
     await ensure_minio_bucket_ready(CONFIG.FILES_BUCKET_NAME)

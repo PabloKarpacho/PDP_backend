@@ -121,17 +121,14 @@ async def test_run_startup_tasks_bootstraps_bucket_for_minio_backend(
 
 
 @pytest.mark.asyncio
-async def test_run_startup_tasks_skips_bucket_bootstrap_for_aws_backend(
+async def test_run_startup_tasks_skips_storage_bootstrap_for_aws_backend(
     monkeypatch,
 ) -> None:
-    validated = False
-
     async def fake_ensure_minio_bucket_ready(bucket_name: str) -> None:
         raise AssertionError("MinIO bootstrap should not run for AWS backend")
 
     async def fake_ensure_aws_credentials_ready() -> None:
-        nonlocal validated
-        validated = True
+        raise AssertionError("AWS credentials should not be validated at startup")
 
     monkeypatch.setattr(startup_module.CONFIG, "STORAGE_BACKEND", "aws")
     monkeypatch.setattr(
@@ -146,8 +143,6 @@ async def test_run_startup_tasks_skips_bucket_bootstrap_for_aws_backend(
     )
 
     await startup_module.run_startup_tasks()
-
-    assert validated is True
 
 
 @pytest.mark.asyncio

@@ -11,7 +11,6 @@ from src.config import CONFIG
 from src.database_control.s3 import ensure_bucket_exists
 from src.logger import logger
 
-
 StartupRunner = Callable[[], Awaitable[None]]
 BucketInitializer = Callable[[str], Awaitable[None]]
 
@@ -76,7 +75,14 @@ async def ensure_aws_credentials_ready() -> None:
 
 async def run_startup_tasks() -> None:
     if CONFIG.STORAGE_BACKEND == "aws":
-        # await ensure_aws_credentials_ready()
+        logger.info(
+            "Skipping storage bootstrap for AWS backend.",
+            extra={
+                "storage_backend": CONFIG.STORAGE_BACKEND,
+                "storage_region": CONFIG.STORAGE_REGION,
+            },
+        )
+        logger.dump()
         return
 
     await ensure_minio_bucket_ready(CONFIG.FILES_BUCKET_NAME)

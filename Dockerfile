@@ -15,7 +15,7 @@ ENV UVICORN_SSL_KEYFILE=/opt/certs/backend/key.pem
 WORKDIR /work
 
 RUN apt-get update -y && \
-    apt-get install -y --no-install-recommends gcc curl && \
+    apt-get install -y --no-install-recommends gcc curl libcap2-bin && \
     apt-get upgrade -y && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
@@ -33,6 +33,7 @@ RUN useradd --create-home appuser && \
     mkdir -p /opt/certs/backend /opt/certs/keycloak && \
     chown -R appuser:appuser /work /opt/certs && \
     chmod 755 /opt/certs /opt/certs/backend /opt/certs/keycloak && \
+    setcap 'cap_net_bind_service=+ep' "$(readlink -f /usr/local/bin/python3)" && \
     if [ -f /opt/certs/backend/cert.pem ]; then chmod 644 /opt/certs/backend/cert.pem; fi && \
     if [ -f /opt/certs/backend/key.pem ]; then chmod 600 /opt/certs/backend/key.pem; fi && \
     if [ -f /opt/certs/keycloak/cert.pem ]; then chmod 644 /opt/certs/keycloak/cert.pem; fi

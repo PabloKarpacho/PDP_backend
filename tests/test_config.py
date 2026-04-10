@@ -10,6 +10,7 @@ def test_settings_use_safe_placeholder_defaults(monkeypatch):
         "SMTP_PASSWORD",
         "MINIO_ROOT_USER",
         "MINIO_ROOT_PASSWORD",
+        "AWS_POSTGRES_PASSWORD",
         "AWS_POSTGRES_SECRET_ARN",
         "KEYCLOAK_CLIENT_SECRET",
         "KEYCLOAK_CA_BUNDLE",
@@ -28,9 +29,25 @@ def test_settings_use_safe_placeholder_defaults(monkeypatch):
     assert settings.SMTP_PASSWORD == "change-me"
     assert settings.MINIO_ROOT_USER == "minioadmin"
     assert settings.MINIO_ROOT_PASSWORD == "change-me"
+    assert settings.AWS_POSTGRES_PASSWORD == ""
     assert settings.AWS_POSTGRES_SECRET_ARN == ""
     assert settings.KEYCLOAK_CLIENT_SECRET == ""
     assert settings.KEYCLOAK_CA_BUNDLE is None
+
+
+def test_settings_allow_aws_database_backend_with_explicit_password(monkeypatch):
+    monkeypatch.setenv("DATABASE_BACKEND", "aws")
+    monkeypatch.setenv("AWS_POSTGRES_REGION", "eu-north-1")
+    monkeypatch.setenv("AWS_POSTGRES_HOST", "database.example.com")
+    monkeypatch.setenv("AWS_POSTGRES_DB", "pdp")
+    monkeypatch.setenv("AWS_POSTGRES_USER", "postgres")
+    monkeypatch.setenv("AWS_POSTGRES_PASSWORD", "explicit-password")
+    monkeypatch.delenv("AWS_POSTGRES_SECRET_ARN", raising=False)
+
+    settings = Settings(_env_file=None)
+
+    assert settings.AWS_POSTGRES_PASSWORD == "explicit-password"
+    assert settings.AWS_POSTGRES_SECRET_ARN == ""
 
 
 def test_settings_read_canonical_environment_variables(monkeypatch):

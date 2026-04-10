@@ -79,6 +79,38 @@ def _build_asyncpg_ssl_config(
     return {"ssl": ssl_context_builder(aws_ssl_root_cert)}
 
 
+def _resolve_aws_database_password(
+    *,
+    explicit_password: str,
+    aws_secret_arn: str,
+    aws_region: str,
+    secret_loader: Callable[[str, str], dict[str, str | int | None]],
+) -> str:
+    """Resolve the AWS PostgreSQL password from env first, then Secrets Manager.
+
+    Args:
+        explicit_password (str): Password provided directly through configuration.
+        aws_secret_arn (str): AWS Secrets Manager secret ARN used as fallback.
+        aws_region (str): AWS region where the secret is stored.
+        secret_loader (Callable[[str, str], dict[str, str | int | None]]): Function
+            that loads a secret payload by ARN and region.
+
+    Returns:
+        str: Non-empty PostgreSQL password.
+    """
+    if explicit_password.strip():
+        return explicit_password
+
+    secret_payload = secret_loader(aws_secret_arn, aws_region)
+    password = secret_payload.get("password")
+    if not isinstance(password, str) or not password:
+        raise ValueError(
+            "Secrets Manager secret payload must contain a non-empty password"
+        )
+
+    return password
+
+
 def _build_database_runtime_config(
     *,
     database_backend: str,
@@ -89,6 +121,7 @@ def _build_database_runtime_config(
     aws_port: int,
     aws_database: str,
     aws_user: str,
+    aws_password: str,
     aws_ssl_mode: str,
     aws_ssl_root_cert: str,
     secret_loader: Callable[
@@ -104,12 +137,12 @@ def _build_database_runtime_config(
             async_connect_args={},
         )
 
-    secret_payload = secret_loader(aws_secret_arn, aws_region)
-    password = secret_payload.get("password")
-    if not isinstance(password, str) or not password:
-        raise ValueError(
-            "Secrets Manager secret payload must contain a non-empty password"
-        )
+    password = _resolve_aws_database_password(
+        explicit_password=aws_password,
+        aws_secret_arn=aws_secret_arn,
+        aws_region=aws_region,
+        secret_loader=secret_loader,
+    )
 
     async_url = URL.create(
         drivername="postgresql+asyncpg",
@@ -157,6 +190,7 @@ def get_database_runtime_config() -> DatabaseRuntimeConfig:
         aws_port=CONFIG.AWS_POSTGRES_PORT,
         aws_database=CONFIG.AWS_POSTGRES_DB,
         aws_user=CONFIG.AWS_POSTGRES_USER,
+        aws_password=CONFIG.AWS_POSTGRES_PASSWORD,
         aws_ssl_mode=CONFIG.AWS_POSTGRES_SSL_MODE,
         aws_ssl_root_cert=CONFIG.AWS_POSTGRES_SSL_ROOT_CERT,
     )

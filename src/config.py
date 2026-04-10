@@ -8,7 +8,6 @@ from pydantic_settings import SettingsConfigDict
 
 from src.schemas import authConfiguration
 
-
 _ENV_FILE = find_dotenv("/work/config/env.file") or find_dotenv() or None
 
 
@@ -43,6 +42,7 @@ class Settings(BaseSettings):
     AWS_POSTGRES_PORT: int = Field(default=5432, alias="AWS_POSTGRES_PORT")
     AWS_POSTGRES_DB: str = Field(default="pdp", alias="AWS_POSTGRES_DB")
     AWS_POSTGRES_USER: str = Field(default="app", alias="AWS_POSTGRES_USER")
+    AWS_POSTGRES_PASSWORD: str = Field(default="", alias="AWS_POSTGRES_PASSWORD")
     AWS_POSTGRES_SECRET_ARN: str = Field(default="", alias="AWS_POSTGRES_SECRET_ARN")
     AWS_POSTGRES_SSL_MODE: str = Field(default="disable", alias="AWS_POSTGRES_SSL_MODE")
     AWS_POSTGRES_SSL_ROOT_CERT: str = Field(
@@ -153,9 +153,13 @@ class Settings(BaseSettings):
                     "AWS_POSTGRES_USER must not be empty for aws database backend"
                 )
 
-            if not self.AWS_POSTGRES_SECRET_ARN.strip():
+            if (
+                not self.AWS_POSTGRES_PASSWORD.strip()
+                and not self.AWS_POSTGRES_SECRET_ARN.strip()
+            ):
                 raise ValueError(
-                    "AWS_POSTGRES_SECRET_ARN must not be empty for aws database backend"
+                    "AWS_POSTGRES_PASSWORD or AWS_POSTGRES_SECRET_ARN must not be "
+                    "empty for aws database backend"
                 )
 
             if not self.AWS_POSTGRES_SSL_MODE.strip():

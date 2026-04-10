@@ -2,7 +2,6 @@ import importlib
 
 from sqlalchemy.engine import make_url
 
-
 postgres_db_module = importlib.import_module("src.database_control.postgres.db")
 
 
@@ -18,6 +17,7 @@ def test_build_database_runtime_config_uses_local_dsn_without_aws_dependencies()
         aws_port=5432,
         aws_database="postgres",
         aws_user="postgres",
+        aws_password="",
         aws_ssl_mode="verify-full",
         aws_ssl_root_cert="./global-bundle.pem",
         secret_loader=lambda secret_arn, region_name: {"password": "unused"},
@@ -58,6 +58,7 @@ def test_build_database_runtime_config_uses_aws_secret_and_rds_ssl() -> None:
         aws_port=5432,
         aws_database="postgres",
         aws_user="postgres",
+        aws_password="",
         aws_ssl_mode="verify-full",
         aws_ssl_root_cert="./global-bundle.pem",
         secret_loader=fake_secret_loader,
@@ -89,6 +90,43 @@ def test_build_database_runtime_config_uses_aws_secret_and_rds_ssl() -> None:
     assert runtime_config.async_connect_args == {"ssl": fake_ssl_context}
 
 
+def test_build_database_runtime_config_prefers_explicit_aws_password() -> None:
+    def fail_secret_loader(secret_arn: str, region_name: str) -> dict[str, str]:
+        raise AssertionError("Secret loader must not be called with explicit password")
+
+    runtime_config = postgres_db_module._build_database_runtime_config(
+        database_backend="aws",
+        local_dsn="postgresql://postgres:postgres@localhost:5432/pdp",
+        aws_region="eu-north-1",
+        aws_secret_arn="",
+        aws_host="database-1.cxgewygq0xq3.eu-north-1.rds.amazonaws.com",
+        aws_port=5432,
+        aws_database="postgres",
+        aws_user="postgres",
+        aws_password="explicit-rds-password",
+        aws_ssl_mode="require",
+        aws_ssl_root_cert="",
+        secret_loader=fail_secret_loader,
+        ssl_context_builder=lambda cert_path: (_ for _ in ()).throw(
+            AssertionError("SSL context must not be built for require mode")
+        ),
+    )
+
+    parsed_async_dsn = make_url(runtime_config.async_dsn)
+    parsed_sync_dsn = make_url(runtime_config.sync_dsn)
+
+    assert parsed_async_dsn.drivername == "postgresql+asyncpg"
+    assert parsed_async_dsn.username == "postgres"
+    assert parsed_async_dsn.password == "explicit-rds-password"
+    assert (
+        parsed_async_dsn.host == "database-1.cxgewygq0xq3.eu-north-1.rds.amazonaws.com"
+    )
+    assert parsed_sync_dsn.drivername == "postgresql+psycopg2"
+    assert parsed_sync_dsn.password == "explicit-rds-password"
+    assert parsed_sync_dsn.query["sslmode"] == "require"
+    assert runtime_config.async_connect_args == {"ssl": True}
+
+
 def test_build_database_runtime_config_allows_aws_without_ssl_certificate() -> None:
     observed_secret_requests: list[tuple[str, str]] = []
 
@@ -105,6 +143,7 @@ def test_build_database_runtime_config_allows_aws_without_ssl_certificate() -> N
         aws_port=5432,
         aws_database="postgres",
         aws_user="postgres",
+        aws_password="",
         aws_ssl_mode="disable",
         aws_ssl_root_cert="",
         secret_loader=fake_secret_loader,

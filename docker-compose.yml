@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   pdp-backend:
@@ -24,10 +24,10 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.25'
+          cpus: "0.25"
           memory: 256M
         reservations:
-          cpus: '0.1'
+          cpus: "0.1"
           memory: 128M
 
   pdp-keycloak:
@@ -64,14 +64,15 @@ services:
     volumes:
       - .:/work:ro #needed for getting aws certificates which let communication with postgres
       - ./realm-export.json:/opt/keycloak/data/import/realm-export.json
-    command: start --import-realm
+      - ./themes:/opt/keycloak/themes
+    command: start-dev --http-enabled=true --import-realm
     deploy:
       resources:
         limits:
-          cpus: '0.7'
+          cpus: "0.7"
           memory: 768M
         reservations:
-          cpus: '0.3'
+          cpus: "0.3"
           memory: 512M
 
 networks:

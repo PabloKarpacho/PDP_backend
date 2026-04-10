@@ -25,6 +25,7 @@ def _prepare_fake_venv(tmp_path: Path) -> tuple[Path, Path]:
         bin_dir / "uvicorn",
         """#!/usr/bin/env bash
         printf '%s\n' "$@" > "$TEST_STATE_DIR/uvicorn-args.log"
+        env | sort > "$TEST_STATE_DIR/uvicorn-env.log"
         exit 0
         """,
     )
@@ -98,8 +99,47 @@ def test_run_backend_skips_ssl_in_auto_mode_when_files_missing(tmp_path: Path) -
     )
 
     uvicorn_args = (state_dir / "uvicorn-args.log").read_text()
+    uvicorn_env = (state_dir / "uvicorn-env.log").read_text()
 
     assert result.returncode == 0
     assert "Uvicorn SSL skipped" in result.stdout
     assert "--ssl-certfile=" not in uvicorn_args
     assert "--ssl-keyfile=" not in uvicorn_args
+    assert "UVICORN_SSL_CERTFILE=" not in uvicorn_env
+    assert "UVICORN_SSL_KEYFILE=" not in uvicorn_env
+
+
+def test_run_backend_unsets_uvicorn_ssl_env_when_explicitly_disabled(
+    tmp_path: Path,
+) -> None:
+    venv_dir, state_dir = _prepare_fake_venv(tmp_path)
+
+    env = os.environ.copy()
+    env.update(
+        {
+            "UV_PROJECT_ENVIRONMENT": str(venv_dir),
+            "UVICORN_SSL_MODE": "false",
+            "UVICORN_SSL_CERTFILE": str(tmp_path / "missing-cert.pem"),
+            "UVICORN_SSL_KEYFILE": str(tmp_path / "missing-key.pem"),
+            "TEST_STATE_DIR": str(state_dir),
+        }
+    )
+
+    result = subprocess.run(
+        ["bash", str(SCRIPT_PATH)],
+        cwd=PROJECT_ROOT,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    uvicorn_args = (state_dir / "uvicorn-args.log").read_text()
+    uvicorn_env = (state_dir / "uvicorn-env.log").read_text()
+
+    assert result.returncode == 0
+    assert "Uvicorn SSL disabled explicitly." in result.stdout
+    assert "--ssl-certfile=" not in uvicorn_args
+    assert "--ssl-keyfile=" not in uvicorn_args
+    assert "UVICORN_SSL_CERTFILE=" not in uvicorn_env
+    assert "UVICORN_SSL_KEYFILE=" not in uvicorn_env

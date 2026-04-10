@@ -8,7 +8,7 @@ ENV UV_COMPILE_BYTECODE=1
 ENV UV_LINK_MODE=copy
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-ENV UVICORN_SSL_MODE=true
+ENV UVICORN_SSL_MODE=false
 ENV UVICORN_SSL_CERTFILE=/opt/certs/backend/cert.pem
 ENV UVICORN_SSL_KEYFILE=/opt/certs/backend/key.pem
 
@@ -38,6 +38,6 @@ RUN useradd --create-home appuser && \
     if [ -f /opt/certs/keycloak/cert.pem ]; then chmod 644 /opt/certs/keycloak/cert.pem; fi
 USER appuser
 
-EXPOSE 8000
+EXPOSE 80
 
 CMD ["./scripts/run-backend.sh"]

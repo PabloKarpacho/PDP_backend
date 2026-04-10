@@ -23,9 +23,22 @@ uvicorn_args=(
 )
 
 
+disable_uvicorn_ssl_env() {
+    # Uvicorn reads UVICORN_SSL_* directly via Click env vars, even without CLI flags.
+    unset UVICORN_SSL_CERTFILE
+    unset UVICORN_SSL_KEYFILE
+    unset UVICORN_SSL_KEYFILE_PASSWORD
+    unset UVICORN_SSL_VERSION
+    unset UVICORN_SSL_CERT_REQS
+    unset UVICORN_SSL_CA_CERTS
+    unset UVICORN_SSL_CIPHERS
+}
+
+
 configure_ssl() {
     case "$UVICORN_SSL_MODE" in
         false)
+            disable_uvicorn_ssl_env
             echo "Uvicorn SSL disabled explicitly."
             return 0
             ;;
@@ -55,6 +68,7 @@ configure_ssl() {
                 return 0
             fi
             echo "Uvicorn SSL skipped: certificate or key is missing or unreadable."
+            disable_uvicorn_ssl_env
             return 0
             ;;
         *)

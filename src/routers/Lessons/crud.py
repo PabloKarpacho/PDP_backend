@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from src.logger import logger
 from src.models import LessonDAO
 
 
@@ -92,6 +93,16 @@ async def list_lessons(
     Returns:
         List of lesson ORM objects.
     """
+    logger.info(
+        "Executing lesson list query.",
+        extra={
+            "teacher_id": teacher_id,
+            "student_id": student_id,
+            "include_deleted": include_deleted,
+            "has_start_time_filter": start_time is not None,
+            "has_end_time_filter": end_time is not None,
+        },
+    )
     statement = select(LessonDAO).options(selectinload(LessonDAO.homework))
     statement = _apply_lesson_filters(
         statement,
@@ -103,7 +114,12 @@ async def list_lessons(
     )
 
     result = await db.execute(statement)
-    return list(result.scalars().all())
+    lessons = list(result.scalars().all())
+    logger.info(
+        "Lesson list query completed.",
+        extra={"result_count": len(lessons)},
+    )
+    return lessons
 
 
 async def get_lesson(
@@ -128,6 +144,16 @@ async def get_lesson(
     Returns:
         Matching lesson ORM object or None.
     """
+    logger.info(
+        "Executing lesson detail query.",
+        extra={
+            "lesson_id": lesson_id,
+            "teacher_id": teacher_id,
+            "student_id": student_id,
+            "include_deleted": include_deleted,
+            "load_homework": load_homework,
+        },
+    )
     statement = select(LessonDAO)
 
     if load_homework:
@@ -142,7 +168,12 @@ async def get_lesson(
     )
 
     result = await db.execute(statement)
-    return result.scalar_one_or_none()
+    lesson = result.scalar_one_or_none()
+    logger.info(
+        "Lesson detail query completed.",
+        extra={"lesson_id": lesson_id, "lesson_found": lesson is not None},
+    )
+    return lesson
 
 
 async def create_lesson(
@@ -171,6 +202,14 @@ async def create_lesson(
     Returns:
         Created lesson ORM object after commit and refresh.
     """
+    logger.info(
+        "Creating lesson in database.",
+        extra={
+            "teacher_id": teacher_id,
+            "student_id": student_id,
+            "status": status,
+        },
+    )
     normalized_start_time = _normalize_datetime_to_utc(start_time)
     normalized_end_time = _normalize_datetime_to_utc(end_time)
 
@@ -187,6 +226,10 @@ async def create_lesson(
     db.add(lesson)
     await db.commit()
     await db.refresh(lesson)
+    logger.info(
+        "Lesson created in database.",
+        extra={"lesson_id": lesson.id, "teacher_id": teacher_id},
+    )
 
     return lesson
 
@@ -211,6 +254,15 @@ async def update_lesson(
     Returns:
         Updated lesson ORM object or None if nothing matched.
     """
+    logger.info(
+        "Updating lesson in database.",
+        extra={
+            "lesson_id": lesson_id,
+            "teacher_id": teacher_id,
+            "student_id": student_id,
+            "fields": sorted(update_data.keys()),
+        },
+    )
     lesson = await get_lesson(
         db,
         lesson_id=lesson_id,
@@ -219,6 +271,10 @@ async def update_lesson(
     )
 
     if lesson is None:
+        logger.info(
+            "Lesson update target was not found in database.",
+            extra={"lesson_id": lesson_id},
+        )
         return None
 
     normalized_update_data = dict(update_data)
@@ -244,6 +300,10 @@ async def update_lesson(
 
     await db.commit()
     await db.refresh(lesson)
+    logger.info(
+        "Lesson updated in database.",
+        extra={"lesson_id": lesson.id},
+    )
 
     return lesson
 
@@ -266,6 +326,14 @@ async def soft_delete_lesson(
     Returns:
         Deleted lesson ORM object or None if nothing matched.
     """
+    logger.info(
+        "Soft deleting lesson in database.",
+        extra={
+            "lesson_id": lesson_id,
+            "teacher_id": teacher_id,
+            "student_id": student_id,
+        },
+    )
     lesson = await get_lesson(
         db,
         lesson_id=lesson_id,
@@ -275,6 +343,10 @@ async def soft_delete_lesson(
     )
 
     if lesson is None:
+        logger.info(
+            "Lesson deletion target was not found in database.",
+            extra={"lesson_id": lesson_id},
+        )
         return None
 
     lesson.is_deleted = True
@@ -283,5 +355,9 @@ async def soft_delete_lesson(
         lesson.homework.is_deleted = True
 
     await db.commit()
+    logger.info(
+        "Lesson soft deleted in database.",
+        extra={"lesson_id": lesson.id},
+    )
 
     return lesson

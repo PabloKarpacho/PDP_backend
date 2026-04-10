@@ -3,7 +3,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.logger import logger
 from src.models import UserDAO
-from src.schemas import KeycloakUser
 
 
 async def get_user(
@@ -12,32 +11,71 @@ async def get_user(
     user_id: str,
 ) -> UserDAO | None:
     """Return one application user by identifier."""
+    logger.info(
+        "Loading user from database.",
+        extra={"user_id": user_id},
+    )
     result = await db.execute(select(UserDAO).filter_by(id=user_id))
-    return result.scalar_one_or_none()
+    user = result.scalar_one_or_none()
+    logger.info(
+        "User database lookup completed.",
+        extra={"user_id": user_id, "user_found": user is not None},
+    )
+    return user
 
 
-async def get_or_create_user(
+async def create_user(
     db: AsyncSession,
     *,
-    keycloak_user: KeycloakUser,
+    user_id: str,
+    name: str | None,
+    surname: str | None,
+    email: str,
+    role: str | None,
 ) -> UserDAO:
-    """Return an existing application user or create one from Keycloak data."""
-    logger.info(f"get_user called with keycloak_user.id: {keycloak_user.id}")
-    user = await get_user(db, user_id=keycloak_user.id)
-
-    if user is not None:
-        return user
-
+    """Create a new application user record."""
+    logger.info(
+        "Creating user in database.",
+        extra={"user_id": user_id, "role": role},
+    )
     user = UserDAO(
-        id=keycloak_user.id,
-        name=keycloak_user.username,
-        surname=keycloak_user.last_name,
-        email=keycloak_user.email,
-        role=keycloak_user.role,
+        id=user_id,
+        name=name,
+        surname=surname,
+        email=email,
+        role=role,
     )
     db.add(user)
     await db.commit()
     await db.refresh(user)
+    logger.info(
+        "User created in database.",
+        extra={"user_id": user.id, "role": user.role},
+    )
+    return user
 
-    logger.info(f"Добавили пользователя {user.id}")
+
+async def update_user(
+    db: AsyncSession,
+    *,
+    user: UserDAO,
+    name: str | None,
+    surname: str | None,
+    email: str,
+    role: str | None,
+) -> UserDAO:
+    logger.info(
+        "Updating user in database.",
+        extra={"user_id": user.id, "role": role},
+    )
+    user.name = name
+    user.surname = surname
+    user.email = email
+    user.role = role
+    await db.commit()
+    await db.refresh(user)
+    logger.info(
+        "User updated in database.",
+        extra={"user_id": user.id, "role": user.role},
+    )
     return user

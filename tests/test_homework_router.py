@@ -3,9 +3,16 @@ from types import SimpleNamespace
 import importlib
 
 import pytest
+from fastapi import HTTPException
 
 from src.constants import Roles
 from src.routers.Homework.schemas import HomeworkCreateSchema, HomeworkUpdateSchema
+from src.services.exceptions import (
+    ConflictError,
+    ForbiddenError,
+    NotFoundError,
+    ValidationError,
+)
 
 
 homework_router_module = importlib.import_module("src.routers.Homework.router")
@@ -36,27 +43,37 @@ def build_homework_payload():
         "name": "Homework 1",
         "description": "Solve tasks",
         "files_urls": ["task.pdf"],
-        "answer": None,
-        "sent_files": None,
         "deadline": now + timedelta(days=1),
         "lesson_id": 5,
-        "is_deleted": False,
-        "updated_at": now,
-        "created_at": now,
+    }
+
+
+def build_homework_update_payload():
+    now = datetime.now()
+    return {
+        "name": "Homework 1",
+        "description": "Solve tasks",
+        "files_urls": ["task.pdf"],
+        "deadline": now + timedelta(days=1),
     }
 
 
 @pytest.mark.asyncio
 async def test_get_homeworks_for_student_passes_student_filter(monkeypatch):
     captured = {}
-    homework = build_homework_dao()
+    homework = SimpleNamespace(id=1, lesson_id=5)
 
-    async def fake_list_homeworks(db, **filters):
+    async def fake_list_homeworks_for_user(*, db, user, lesson_id):
         captured["db"] = db
-        captured["filters"] = filters
+        captured["user"] = user
+        captured["lesson_id"] = lesson_id
         return [homework]
 
-    monkeypatch.setattr(homework_router_module, "list_homeworks", fake_list_homeworks)
+    monkeypatch.setattr(
+        homework_router_module,
+        "list_homeworks_for_user",
+        fake_list_homeworks_for_user,
+    )
 
     user = SimpleNamespace(id="student-1", role=Roles.STUDENT)
     db = object()
@@ -67,28 +84,31 @@ async def test_get_homeworks_for_student_passes_student_filter(monkeypatch):
         lesson_id=5,
     )
 
-    assert len(result) == 1
-    assert result[0].lesson_id == 5
+    assert result.success is True
+    assert result.error is None
+    assert result.meta.pagination is None
+    assert len(result.data) == 1
+    assert result.data[0].lesson_id == 5
     assert captured["db"] is db
-    assert captured["filters"]["student_id"] == "student-1"
-    assert captured["filters"]["lesson_id"] == 5
-    assert "teacher_id" not in captured["filters"]
+    assert captured["user"] is user
+    assert captured["lesson_id"] == 5
 
 
 @pytest.mark.asyncio
-async def test_get_homework_for_teacher_passes_teacher_filter(monkeypatch):
+async def test_get_homework_for_teacher_uses_service(monkeypatch):
     captured = {}
     homework = build_homework_dao()
 
-    async def fake_get_homework(db, *, homework_id, load_lesson, **filters):
+    async def fake_get_homework_for_user(*, db, homework_id, user):
         captured["db"] = db
         captured["homework_id"] = homework_id
-        captured["load_lesson"] = load_lesson
-        captured["filters"] = filters
+        captured["user"] = user
         return homework
 
     monkeypatch.setattr(
-        homework_router_module, "get_homework_record", fake_get_homework
+        homework_router_module,
+        "get_homework_for_user",
+        fake_get_homework_for_user,
     )
 
     user = SimpleNamespace(id="teacher-1", role=Roles.TEACHER)
@@ -100,25 +120,49 @@ async def test_get_homework_for_teacher_passes_teacher_filter(monkeypatch):
         db=db,
     )
 
-    assert result.id == 1
+    assert result.success is True
+    assert result.error is None
+    assert result.data.id == 1
     assert captured["db"] is db
     assert captured["homework_id"] == 7
-    assert captured["load_lesson"] is True
-    assert captured["filters"]["teacher_id"] == "teacher-1"
+    assert captured["user"] is user
+
+
+@pytest.mark.asyncio
+async def test_get_homework_returns_403_when_service_raises_forbidden(monkeypatch):
+    async def fake_get_homework_for_user(*, db, homework_id, user):
+        raise ForbiddenError("Forbidden")
+
+    monkeypatch.setattr(
+        homework_router_module,
+        "get_homework_for_user",
+        fake_get_homework_for_user,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await homework_router_module.get_homework(
+            homework_id=7,
+            user=SimpleNamespace(id="student-1", role="Admin"),
+            db=object(),
+        )
+
+    assert exc_info.value.status_code == 403
 
 
 @pytest.mark.asyncio
 async def test_create_homework_for_teacher_uses_current_teacher_id(monkeypatch):
     captured = {}
-    homework = build_homework_dao()
 
-    async def fake_create_homework(db, **payload):
+    async def fake_create_homework_for_teacher(*, db, user, homework):
         captured["db"] = db
-        captured["payload"] = payload
+        captured["user"] = user
+        captured["homework"] = homework
         return homework
 
     monkeypatch.setattr(
-        homework_router_module, "create_homework_record", fake_create_homework
+        homework_router_module,
+        "create_homework_for_teacher",
+        fake_create_homework_for_teacher,
     )
 
     user = SimpleNamespace(id="teacher-1", role=Roles.TEACHER)
@@ -131,33 +175,99 @@ async def test_create_homework_for_teacher_uses_current_teacher_id(monkeypatch):
         db=db,
     )
 
-    assert result.lesson_id == 5
+    assert result.success is True
+    assert result.error is None
+    assert result.data.lesson_id == 5
     assert captured["db"] is db
-    assert captured["payload"]["teacher_id"] == "teacher-1"
-    assert captured["payload"]["lesson_id"] == 5
+    assert captured["user"] is user
+    assert captured["homework"] is homework_payload
 
 
 @pytest.mark.asyncio
-async def test_update_homework_for_student_passes_only_student_fields(monkeypatch):
-    captured = {}
-    homework = build_homework_dao(answer="done", sent_files=["answer.pdf"])
+async def test_create_homework_maps_validation_error_to_400(monkeypatch):
+    async def fake_create_homework_for_teacher(*, db, user, homework):
+        raise ValidationError("lesson_id is required")
 
-    async def fake_update_homework(db, *, homework_id, student_id, **payload):
+    monkeypatch.setattr(
+        homework_router_module,
+        "create_homework_for_teacher",
+        fake_create_homework_for_teacher,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await homework_router_module.create_homework(
+            homework=HomeworkCreateSchema(**build_homework_payload()),
+            user=SimpleNamespace(id="teacher-1", role=Roles.TEACHER),
+            db=object(),
+        )
+
+    assert exc_info.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_create_homework_maps_forbidden_error_to_403(monkeypatch):
+    async def fake_create_homework_for_teacher(*, db, user, homework):
+        raise ForbiddenError("Active teacher-student relation is required")
+
+    monkeypatch.setattr(
+        homework_router_module,
+        "create_homework_for_teacher",
+        fake_create_homework_for_teacher,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await homework_router_module.create_homework(
+            homework=HomeworkCreateSchema(**build_homework_payload()),
+            user=SimpleNamespace(id="teacher-1", role=Roles.TEACHER),
+            db=object(),
+        )
+
+    assert exc_info.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_create_homework_maps_conflict_error_to_409(monkeypatch):
+    async def fake_create_homework_for_teacher(*, db, user, homework):
+        raise ConflictError("Lesson already has homework")
+
+    monkeypatch.setattr(
+        homework_router_module,
+        "create_homework_for_teacher",
+        fake_create_homework_for_teacher,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await homework_router_module.create_homework(
+            homework=HomeworkCreateSchema(**build_homework_payload()),
+            user=SimpleNamespace(id="teacher-1", role=Roles.TEACHER),
+            db=object(),
+        )
+
+    assert exc_info.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_update_homework_for_student_uses_service(monkeypatch):
+    captured = {}
+
+    async def fake_update_homework_for_user(*, db, homework_id, user, homework):
         captured["db"] = db
         captured["homework_id"] = homework_id
-        captured["student_id"] = student_id
-        captured["payload"] = payload
+        captured["user"] = user
+        captured["homework"] = homework
         return homework
 
     monkeypatch.setattr(
-        homework_router_module, "update_homework_record", fake_update_homework
+        homework_router_module,
+        "update_homework_for_user",
+        fake_update_homework_for_user,
     )
 
     user = SimpleNamespace(id="student-1", role=Roles.STUDENT)
     db = object()
     homework_payload = HomeworkUpdateSchema(
         **{
-            **build_homework_payload(),
+            **build_homework_update_payload(),
             "description": "teacher-only field",
             "answer": "done",
             "sent_files": ["answer.pdf"],
@@ -171,26 +281,51 @@ async def test_update_homework_for_student_passes_only_student_fields(monkeypatc
         db=db,
     )
 
-    assert result.answer == "done"
+    assert result.success is True
+    assert result.error is None
+    assert result.data.answer == "done"
     assert captured["db"] is db
     assert captured["homework_id"] == 9
-    assert captured["student_id"] == "student-1"
-    assert captured["payload"] == {"answer": "done", "sent_files": ["answer.pdf"]}
+    assert captured["user"] is user
+    assert captured["homework"] is homework_payload
 
 
 @pytest.mark.asyncio
-async def test_delete_homework_for_teacher_passes_teacher_filter(monkeypatch):
-    captured = {}
-    homework = build_homework_dao(id=7)
-
-    async def fake_soft_delete_homework(db, *, homework_id, teacher_id):
-        captured["db"] = db
-        captured["homework_id"] = homework_id
-        captured["teacher_id"] = teacher_id
-        return homework
+async def test_update_homework_maps_not_found_to_404(monkeypatch):
+    async def fake_update_homework_for_user(*, db, homework_id, user, homework):
+        raise NotFoundError("Homework not found")
 
     monkeypatch.setattr(
-        homework_router_module, "soft_delete_homework", fake_soft_delete_homework
+        homework_router_module,
+        "update_homework_for_user",
+        fake_update_homework_for_user,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await homework_router_module.update_homework(
+            homework=HomeworkUpdateSchema(**build_homework_update_payload()),
+            homework_id=9,
+            user=SimpleNamespace(id="student-1", role=Roles.STUDENT),
+            db=object(),
+        )
+
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_homework_for_teacher_uses_service(monkeypatch):
+    captured = {}
+
+    async def fake_delete_homework_for_teacher(*, db, homework_id, user):
+        captured["db"] = db
+        captured["homework_id"] = homework_id
+        captured["user"] = user
+        return 7
+
+    monkeypatch.setattr(
+        homework_router_module,
+        "delete_homework_for_teacher",
+        fake_delete_homework_for_teacher,
     )
 
     user = SimpleNamespace(id="teacher-1", role=Roles.TEACHER)
@@ -202,7 +337,9 @@ async def test_delete_homework_for_teacher_passes_teacher_filter(monkeypatch):
         db=db,
     )
 
-    assert result == 7
+    assert result.success is True
+    assert result.error is None
+    assert result.data == 7
     assert captured["db"] is db
     assert captured["homework_id"] == 7
-    assert captured["teacher_id"] == "teacher-1"
+    assert captured["user"] is user

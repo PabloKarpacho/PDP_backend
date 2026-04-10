@@ -36,9 +36,21 @@ class FakeAsyncSession:
         self.refresh_calls += 1
 
 
+def build_existing_user(**overrides):
+    payload = {
+        "id": "user-1",
+        "name": "existing",
+        "surname": "User",
+        "email": "existing@example.com",
+        "role": Roles.TEACHER,
+    }
+    payload.update(overrides)
+    return SimpleNamespace(**payload)
+
+
 @pytest.mark.asyncio
 async def test_get_user_returns_existing_user_without_creating_new_one():
-    existing_user = SimpleNamespace(id="user-1")
+    existing_user = build_existing_user()
     session = FakeAsyncSession(existing_user=existing_user)
     keycloak_user = KeycloakUser(
         id="user-1",
@@ -46,7 +58,7 @@ async def test_get_user_returns_existing_user_without_creating_new_one():
         email="existing@example.com",
         last_name="User",
         role="teacher",
-        realm_roles=[],
+        realm_roles=[Roles.TEACHER.lower()],
     )
 
     result = await get_user(keycloak_user=keycloak_user, db=session)
@@ -65,30 +77,55 @@ async def test_get_user_creates_user_when_missing():
         username="new-user",
         email="new@example.com",
         last_name="User",
-        role="student",
-        realm_roles=[],
+        role="teacher",
+        realm_roles=[Roles.STUDENT.lower()],
     )
 
     result = await get_user(keycloak_user=keycloak_user, db=session)
 
     assert result.id == "user-2"
     assert result.email == "new@example.com"
+    assert result.role == Roles.STUDENT
     assert len(session.added) == 1
     assert session.commit_calls == 1
     assert session.refresh_calls == 1
 
 
 @pytest.mark.asyncio
-async def test_get_teacher_returns_existing_teacher_from_keycloak_role():
-    existing_user = SimpleNamespace(id="teacher-1")
-    session = FakeAsyncSession(existing_user=existing_user)
+async def test_get_teacher_rejects_payload_role_without_teacher_realm_role():
+    session = FakeAsyncSession(existing_user=None)
     keycloak_user = KeycloakUser(
         id="teacher-1",
         username="teacher",
         email="teacher@example.com",
         last_name="User",
         role=Roles.TEACHER,
-        realm_roles=[],
+        realm_roles=[Roles.STUDENT.lower()],
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_teacher(keycloak_user=keycloak_user, db=session)
+
+    assert exc_info.value.status_code == 403
+    assert session.added == []
+    assert session.commit_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_get_teacher_uses_teacher_realm_role_even_when_payload_role_conflicts():
+    existing_user = build_existing_user(
+        id="teacher-1",
+        name="teacher",
+        email="teacher@example.com",
+    )
+    session = FakeAsyncSession(existing_user=existing_user)
+    keycloak_user = KeycloakUser(
+        id="teacher-1",
+        username="teacher",
+        email="teacher@example.com",
+        last_name="User",
+        role=Roles.STUDENT,
+        realm_roles=[Roles.TEACHER.lower()],
     )
 
     result = await get_teacher(keycloak_user=keycloak_user, db=session)
@@ -99,8 +136,12 @@ async def test_get_teacher_returns_existing_teacher_from_keycloak_role():
 
 
 @pytest.mark.asyncio
-async def test_get_teacher_uses_keycloak_realm_role():
-    existing_user = SimpleNamespace(id="teacher-2")
+async def test_get_teacher_prefers_teacher_when_multiple_supported_realm_roles_exist():
+    existing_user = build_existing_user(
+        id="teacher-2",
+        name="teacher",
+        email="teacher2@example.com",
+    )
     session = FakeAsyncSession(existing_user=existing_user)
     keycloak_user = KeycloakUser(
         id="teacher-2",
@@ -108,7 +149,7 @@ async def test_get_teacher_uses_keycloak_realm_role():
         email="teacher2@example.com",
         last_name="User",
         role=None,
-        realm_roles=[Roles.TEACHER],
+        realm_roles=[Roles.STUDENT.lower(), Roles.TEACHER.lower()],
     )
 
     result = await get_teacher(keycloak_user=keycloak_user, db=session)
@@ -125,7 +166,7 @@ async def test_get_teacher_raises_for_non_teacher():
         email="student@example.com",
         last_name="User",
         role=Roles.STUDENT,
-        realm_roles=[Roles.STUDENT],
+        realm_roles=[Roles.STUDENT.lower()],
     )
 
     with pytest.raises(HTTPException) as exc_info:

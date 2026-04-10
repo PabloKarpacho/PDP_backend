@@ -24,11 +24,26 @@ def build_user_dao(**overrides):
 
 
 @pytest.mark.asyncio
-async def test_get_current_user_returns_serialized_user():
+async def test_get_current_user_uses_user_service(monkeypatch):
     user = build_user_dao()
+    captured = {}
+
+    def fake_get_current_user_profile(service_user):
+        captured["user"] = service_user
+        return SimpleNamespace(id="user-1", email="john@example.com", role="Teacher")
+
+    monkeypatch.setattr(
+        users_router_module,
+        "get_current_user_profile",
+        fake_get_current_user_profile,
+    )
 
     result = await users_router_module.get_current_user(user=user)
 
-    assert result.id == "user-1"
-    assert result.email == "john@example.com"
-    assert result.role == "Teacher"
+    assert captured["user"] is user
+    assert result.success is True
+    assert result.error is None
+    assert result.meta.pagination is None
+    assert result.data.id == "user-1"
+    assert result.data.email == "john@example.com"
+    assert result.data.role == "Teacher"

@@ -4,6 +4,7 @@ import uuid
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Column,
     DateTime,
     ForeignKey,
@@ -45,8 +46,21 @@ class TeachersStudentsDAO(Base):
             "student_id",
             name="uq_teachers_students_teacher_student",
         ),
-        Index("ix_teachers_students_teacher_id", "teacher_id"),
-        Index("ix_teachers_students_student_id", "student_id"),
+        CheckConstraint(
+            "teacher_id <> student_id",
+            name="ck_teachers_students_not_self",
+        ),
+        CheckConstraint(
+            "status IN ('active', 'archived')",
+            name="ck_teachers_students_status",
+        ),
+        CheckConstraint(
+            "(status = 'active' AND archived_at IS NULL) OR "
+            "(status = 'archived' AND archived_at IS NOT NULL)",
+            name="ck_teachers_students_archived_at_matches_status",
+        ),
+        Index("ix_teachers_students_teacher_id_status", "teacher_id", "status"),
+        Index("ix_teachers_students_student_id_status", "student_id", "status"),
     )
 
     id: Mapped[int] = Column(Integer, primary_key=True, autoincrement=True)
@@ -60,6 +74,14 @@ class TeachersStudentsDAO(Base):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
     )
+    status: Mapped[str] = Column(String, nullable=False, default="active")
+    archived_at: Mapped[datetime | None] = Column(
+        DateTime(timezone=True), nullable=True
+    )
+    updated_at: Mapped[datetime] = Column(
+        DateTime(timezone=True), default=func.now(), onupdate=func.now()
+    )
+    created_at: Mapped[datetime] = Column(DateTime(timezone=True), default=func.now())
 
 
 class LessonDAO(Base):

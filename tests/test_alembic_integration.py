@@ -66,6 +66,10 @@ def test_alembic_upgrade_head_on_empty_database() -> None:
             teachers_students_foreign_keys = inspector.get_foreign_keys(
                 "teachers_students"
             )
+            relation_indexes = {
+                tuple(index["column_names"])
+                for index in inspector.get_indexes("teachers_students")
+            }
             lesson_indexes = {
                 tuple(index["column_names"])
                 for index in inspector.get_indexes("lessons")
@@ -86,6 +90,9 @@ def test_alembic_upgrade_head_on_empty_database() -> None:
         } <= table_names
         assert teachers_students_columns["teacher_id"] is str
         assert teachers_students_columns["student_id"] is str
+        assert teachers_students_columns["status"] is str
+        assert teachers_students_columns["created_at"] is not None
+        assert teachers_students_columns["updated_at"] is not None
         assert any(
             foreign_key["referred_table"] == "users"
             and foreign_key["constrained_columns"] == ["teacher_id"]
@@ -106,6 +113,8 @@ def test_alembic_upgrade_head_on_empty_database() -> None:
             and foreign_key["constrained_columns"] == ["student_id"]
             for foreign_key in lesson_foreign_keys
         )
+        assert ("teacher_id", "status") in relation_indexes
+        assert ("student_id", "status") in relation_indexes
         assert ("teacher_id", "start_time") in lesson_indexes
         assert ("student_id", "start_time") in lesson_indexes
         assert ("homework_id",) in lesson_unique_constraints

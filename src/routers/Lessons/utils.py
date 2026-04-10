@@ -40,11 +40,23 @@ def get_lesson_filters(user: UserDAO) -> dict[str, str] | None:
         or None when the role has no access to lessons.
     """
     if user.role == Roles.STUDENT:
+        logger.info(
+            "Resolved lesson filters for student.",
+            extra={"user_id": user.id},
+        )
         return {"student_id": user.id}
 
     if user.role == Roles.TEACHER:
+        logger.info(
+            "Resolved lesson filters for teacher.",
+            extra={"user_id": user.id},
+        )
         return {"teacher_id": user.id}
 
+    logger.info(
+        "No lesson filters resolved for user role.",
+        extra={"user_id": user.id, "role": user.role},
+    )
     return None
 
 
@@ -61,5 +73,11 @@ def get_lesson_update_data(lesson: LessonUpdateSchema) -> dict:
         exclude_unset=True,
         exclude={"teacher_id", "is_deleted", "updated_at", "created_at"},
     )
-    logger.info(f"Prepared lesson update payload: {payload}")
+    logger.info(
+        "Prepared lesson update payload.",
+        extra={
+            "fields": sorted(payload.keys()),
+            "field_count": len(payload),
+        },
+    )
     return payload

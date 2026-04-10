@@ -72,6 +72,13 @@ def test_alembic_upgrade_head_creates_expected_schema() -> None:
                 for column in inspector.get_columns("teachers_students")
             }
             teacher_student_fks = inspector.get_foreign_keys("teachers_students")
+            teacher_student_indexes = {
+                index["name"] for index in inspector.get_indexes("teachers_students")
+            }
+            teacher_student_checks = {
+                check["name"]
+                for check in inspector.get_check_constraints("teachers_students")
+            }
             lesson_fks = inspector.get_foreign_keys("lessons")
             lesson_indexes = {
                 index["name"] for index in inspector.get_indexes("lessons")
@@ -84,6 +91,10 @@ def test_alembic_upgrade_head_creates_expected_schema() -> None:
 
         assert str(teachers_students_columns["teacher_id"]) == "VARCHAR"
         assert str(teachers_students_columns["student_id"]) == "VARCHAR"
+        assert str(teachers_students_columns["status"]) == "VARCHAR"
+        assert "archived_at" in teachers_students_columns
+        assert "created_at" in teachers_students_columns
+        assert "updated_at" in teachers_students_columns
         assert {
             tuple(fk["constrained_columns"]): tuple(fk["referred_columns"])
             for fk in teacher_student_fks
@@ -91,6 +102,13 @@ def test_alembic_upgrade_head_creates_expected_schema() -> None:
             ("teacher_id",): ("id",),
             ("student_id",): ("id",),
         }
+        assert "ix_teachers_students_teacher_id_status" in teacher_student_indexes
+        assert "ix_teachers_students_student_id_status" in teacher_student_indexes
+        assert "ck_teachers_students_not_self" in teacher_student_checks
+        assert "ck_teachers_students_status" in teacher_student_checks
+        assert (
+            "ck_teachers_students_archived_at_matches_status" in teacher_student_checks
+        )
         assert {
             tuple(fk["constrained_columns"]): tuple(fk["referred_columns"])
             for fk in lesson_fks
@@ -178,6 +196,12 @@ def test_alembic_upgrade_head_handles_legacy_orphan_lesson_refs() -> None:
                     )
                     """
                 )
+                connection.exec_driver_sql(
+                    """
+                    INSERT INTO teachers_students (teacher_id, student_id)
+                    VALUES ('teacher-1', 'teacher-1')
+                    """
+                )
         finally:
             engine.dispose()
 
@@ -198,11 +222,19 @@ def test_alembic_upgrade_head_handles_legacy_orphan_lesson_refs() -> None:
                 lesson_row = connection.exec_driver_sql(
                     "SELECT student_id FROM lessons WHERE theme = 'Legacy lesson'"
                 ).one()
+                self_relations_count = connection.exec_driver_sql(
+                    """
+                    SELECT COUNT(*)
+                    FROM teachers_students
+                    WHERE teacher_id = student_id
+                    """
+                ).scalar_one()
         finally:
             engine.dispose()
 
         assert placeholder_user == ("string", "legacy")
         assert lesson_row == ("string",)
+        assert self_relations_count == 0
     finally:
         with admin_connection.cursor() as cursor:
             cursor.execute(

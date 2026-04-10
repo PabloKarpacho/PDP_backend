@@ -10,6 +10,9 @@ APP_HOST="${APP_HOST:-0.0.0.0}"
 APP_PORT="${APP_PORT:-8000}"
 APP_WORKERS="${APP_WORKERS:-1}"
 PROJECT_VENV="${UV_PROJECT_ENVIRONMENT:-$PROJECT_ROOT/.venv}"
+UVICORN_SSL_MODE="${UVICORN_SSL_MODE:-auto}"
+UVICORN_SSL_CERTFILE="${UVICORN_SSL_CERTFILE:-/opt/certs/backend/cert.pem}"
+UVICORN_SSL_KEYFILE="${UVICORN_SSL_KEYFILE:-/opt/certs/backend/key.pem}"
 
 cd "$PROJECT_ROOT"
 
@@ -18,6 +21,65 @@ uvicorn_args=(
     --host "$APP_HOST"
     --port "$APP_PORT"
 )
+
+
+disable_uvicorn_ssl_env() {
+    # Uvicorn reads UVICORN_SSL_* directly via Click env vars, even without CLI flags.
+    unset UVICORN_SSL_CERTFILE
+    unset UVICORN_SSL_KEYFILE
+    unset UVICORN_SSL_KEYFILE_PASSWORD
+    unset UVICORN_SSL_VERSION
+    unset UVICORN_SSL_CERT_REQS
+    unset UVICORN_SSL_CA_CERTS
+    unset UVICORN_SSL_CIPHERS
+}
+
+
+configure_ssl() {
+    case "$UVICORN_SSL_MODE" in
+        false)
+            disable_uvicorn_ssl_env
+            echo "Uvicorn SSL disabled explicitly."
+            return 0
+            ;;
+        true)
+            if [[ ! -r "$UVICORN_SSL_CERTFILE" ]]; then
+                echo "Configured SSL certificate is not readable: $UVICORN_SSL_CERTFILE" >&2
+                return 1
+            fi
+            if [[ ! -r "$UVICORN_SSL_KEYFILE" ]]; then
+                echo "Configured SSL private key is not readable: $UVICORN_SSL_KEYFILE" >&2
+                return 1
+            fi
+            uvicorn_args+=(
+                --ssl-certfile="$UVICORN_SSL_CERTFILE"
+                --ssl-keyfile="$UVICORN_SSL_KEYFILE"
+            )
+            echo "Uvicorn SSL enabled."
+            return 0
+            ;;
+        auto)
+            if [[ -r "$UVICORN_SSL_CERTFILE" && -r "$UVICORN_SSL_KEYFILE" ]]; then
+                uvicorn_args+=(
+                    --ssl-certfile="$UVICORN_SSL_CERTFILE"
+                    --ssl-keyfile="$UVICORN_SSL_KEYFILE"
+                )
+                echo "Uvicorn SSL enabled automatically."
+                return 0
+            fi
+            echo "Uvicorn SSL skipped: certificate or key is missing or unreadable."
+            disable_uvicorn_ssl_env
+            return 0
+            ;;
+        *)
+            echo "Invalid UVICORN_SSL_MODE: $UVICORN_SSL_MODE (expected: auto, true, false)" >&2
+            return 1
+            ;;
+    esac
+}
+
+
+configure_ssl
 
 if [[ "$APP_WORKERS" =~ ^[0-9]+$ ]] && [ "$APP_WORKERS" -gt 1 ]; then
     uvicorn_args+=(--workers "$APP_WORKERS")

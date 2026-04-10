@@ -1,77 +1,153 @@
-from loguru import logger
-import aioboto3
-
-from typing import BinaryIO
+from dataclasses import dataclass
 from io import BytesIO
+from pathlib import PurePath
+from typing import BinaryIO
+import re
+import unicodedata
+import uuid
+
+import aioboto3
+from aiobotocore.config import AioConfig
+from botocore.exceptions import NoCredentialsError
 
 from src.config import CONFIG
+from src.logger import logger
+
+
+_FILENAME_SAFE_CHARS_PATTERN = re.compile(r"[^a-z0-9]+")
+_AWS_NO_CREDENTIALS_MESSAGE = (
+    "AWS credentials are not available for S3 operations. If the backend runs in "
+    "Docker on EC2, attach an IAM role to the instance and ensure EC2 Instance "
+    "Metadata is enabled and reachable from the container. For IMDSv2 in Docker, "
+    "set HttpPutResponseHopLimit to at least 2."
+)
+
+
+class StorageError(Exception):
+    """Raised when S3-compatible storage operations fail."""
+
+
+def _translate_storage_error(error: Exception, fallback_message: str) -> StorageError:
+    if isinstance(error, NoCredentialsError):
+        return StorageError(_AWS_NO_CREDENTIALS_MESSAGE)
+    return StorageError(fallback_message)
+
+
+@dataclass(frozen=True)
+class StoredObject:
+    bucket_name: str
+    key: str
+    content_type: str | None
+    size: int
+    metadata: dict[str, str] | None = None
+
+
+def sanitize_storage_filename(filename: str | None) -> str:
+    raw_filename = (filename or "").replace("\\", "/")
+    basename = PurePath(raw_filename).name.strip()
+    if not basename:
+        return "file"
+
+    ascii_filename = (
+        unicodedata.normalize("NFKD", basename)
+        .encode("ascii", "ignore")
+        .decode("ascii")
+    )
+    ascii_filename = ascii_filename.strip().lower()
+
+    stem, dot, suffix = ascii_filename.rpartition(".")
+    if not dot:
+        stem = ascii_filename
+        suffix = ""
+
+    normalized_stem = _FILENAME_SAFE_CHARS_PATTERN.sub("-", stem).strip("-")
+    normalized_suffix = re.sub(r"[^a-z0-9]+", "", suffix)
+
+    if not normalized_stem:
+        normalized_stem = "file"
+
+    if normalized_suffix:
+        return f"{normalized_stem}.{normalized_suffix}"
+
+    return normalized_stem
+
+
+def build_storage_object_key(
+    *,
+    filename: str | None,
+    namespace: str = "uploads",
+    owner_scope: str | None = None,
+) -> str:
+    safe_filename = sanitize_storage_filename(filename)
+    stem, dot, suffix = safe_filename.rpartition(".")
+    if not dot:
+        stem = safe_filename
+        suffix = ""
+
+    safe_namespace = _FILENAME_SAFE_CHARS_PATTERN.sub(
+        "-", namespace.strip().lower()
+    ).strip("-")
+    safe_namespace = safe_namespace or "uploads"
+    safe_owner_scope = _FILENAME_SAFE_CHARS_PATTERN.sub(
+        "-", (owner_scope or "").strip().lower()
+    ).strip("-")
+    collision_suffix = str(uuid.uuid4()).split("-")[0]
+    prefix = (
+        f"{safe_namespace}/{safe_owner_scope}" if safe_owner_scope else safe_namespace
+    )
+
+    if suffix:
+        return f"{prefix}/{stem}-{collision_suffix}.{suffix}"
+
+    return f"{prefix}/{stem}-{collision_suffix}"
 
 
 class S3:
     def __init__(
         self,
-        s3_access_key_id: str,
-        s3_secret_access_key: str,
-        endpoint_url: str,
+        *,
         region_name: str = "us-east-1",
+        endpoint_url: str | None = None,
+        s3_access_key_id: str | None = None,
+        s3_secret_access_key: str | None = None,
+        client_config: AioConfig | None = None,
     ) -> None:
-        """
-        Initializes the S3 session.
-
-        Args:
-            aws_access_key_id (str): S3 access key ID
-            aws_secret_access_key (str): S3 secret access key
-            endpoint_url (str): S3 endpoint URL
-        """
         self.endpoint_url = endpoint_url
+        self._client_config = client_config
 
-        self._session = aioboto3.Session(
-            aws_access_key_id=s3_access_key_id,
-            aws_secret_access_key=s3_secret_access_key,
-            region_name=region_name,
-        )
+        session_kwargs = {"region_name": region_name}
+        if s3_access_key_id is not None:
+            session_kwargs["aws_access_key_id"] = s3_access_key_id
+        if s3_secret_access_key is not None:
+            session_kwargs["aws_secret_access_key"] = s3_secret_access_key
+
+        self._session = aioboto3.Session(**session_kwargs)
+
+    def _client_kwargs(self) -> dict[str, str | AioConfig]:
+        client_kwargs: dict[str, str | AioConfig] = {}
+        if self.endpoint_url is not None:
+            client_kwargs["endpoint_url"] = self.endpoint_url
+        if self._client_config is not None:
+            client_kwargs["config"] = self._client_config
+        return client_kwargs
 
     async def create_bucket(self, bucket_name: str) -> None:
-        """
-        Initializes the S3 bucket if it does not exist.
-        Args:
-            bucket_name (str): Name of the S3 bucket to create.
-        """
-        async with self._session.client(
-            "s3",
-            endpoint_url=self.endpoint_url,
-        ) as s3:
+        async with self._session.client("s3", **self._client_kwargs()) as s3:
             existing_buckets = await s3.list_buckets()
             bucket_names = [b["Name"] for b in existing_buckets.get("Buckets", [])]
 
             if bucket_name not in bucket_names:
                 await s3.create_bucket(Bucket=bucket_name)
-                logger.info(
-                    "Created S3 bucket: {bucket_name}".format(bucket_name=bucket_name)
-                )
+                logger.info("Created S3 bucket.")
             else:
-                logger.info(
-                    "S3 bucket already exists: {bucket_name}".format(
-                        bucket_name=bucket_name
-                    )
-                )
+                logger.info("S3 bucket already exists.")
 
     async def put_bucket_lifecycle_configuration(
         self,
         bucket_name: str,
         rules: list[dict],
     ) -> None:
-        """
-        Sets the bucket lifecycle configuration for the specified S3 bucket.
-
-        Args:
-            bucket_name (str): Name of the S3 bucket.
-            rules (list[dict]): The bucket lifecycle configuration to set.
-        """
-        async with self._session.client(
-            "s3",
-            endpoint_url=self.endpoint_url,
-        ) as s3:
+        async with self._session.client("s3", **self._client_kwargs()) as s3:
             existing_buckets = await s3.list_buckets()
             bucket_names = [b["Name"] for b in existing_buckets.get("Buckets", [])]
 
@@ -79,7 +155,8 @@ class S3:
                 raise ValueError(f"Bucket {bucket_name} does not exist.")
 
             await s3.put_bucket_lifecycle_configuration(
-                Bucket=bucket_name, LifecycleConfiguration={"Rules": rules}
+                Bucket=bucket_name,
+                LifecycleConfiguration={"Rules": rules},
             )
 
     async def upload_file(
@@ -90,124 +167,148 @@ class S3:
         url_expiry: int = 3600,
         file_id: str | None = None,
     ) -> str:
-        """
-        Uploads a file to the specified S3 bucket.
-        Args:
-            fileobj (BinaryIO): File-like object to upload.
-            key (str): Key (path) in the S3 bucket where the file will be stored.
-            bucket_name (str): Name of the S3 bucket.
-            url_expiry (int): Expiry time in seconds for the presigned URL.
-            file_id (str): Optional file ID to store as metadata.
-        Returns:
-            str: Presigned URL of the uploaded file.
-        """
-        async with self._session.client(
-            "s3",
-            endpoint_url=self.endpoint_url,
-        ) as s3:
-            logger.info(
-                "Uploading file to S3: bucket={bucket_name}, key={key}, file_id={file_id}".format(
-                    bucket_name=bucket_name, key=key, file_id=file_id
-                )
-            )
+        async with self._session.client("s3", **self._client_kwargs()) as s3:
+            logger.info("Uploading file to storage.")
 
             extra_args = {}
             if file_id:
                 extra_args["Metadata"] = {"file_id": file_id}
 
-            if isinstance(fileobj, str):
-                await s3.upload_file(
-                    Filename=fileobj,
-                    Bucket=bucket_name,
-                    Key=key,
-                    ExtraArgs=extra_args if extra_args else None,
-                )
-            elif hasattr(fileobj, "read"):
-                await s3.upload_fileobj(
-                    Fileobj=fileobj,
-                    Bucket=bucket_name,
-                    Key=key,
-                    ExtraArgs=extra_args if extra_args else None,
-                )
-            else:
-                raise ValueError("fileobj must be a file path or a BinaryIO object")
+            try:
+                if isinstance(fileobj, str):
+                    await s3.upload_file(
+                        Filename=fileobj,
+                        Bucket=bucket_name,
+                        Key=key,
+                        ExtraArgs=extra_args if extra_args else None,
+                    )
+                elif hasattr(fileobj, "read"):
+                    await s3.upload_fileobj(
+                        Fileobj=fileobj,
+                        Bucket=bucket_name,
+                        Key=key,
+                        ExtraArgs=extra_args if extra_args else None,
+                    )
+                else:
+                    raise ValueError("fileobj must be a file path or a BinaryIO object")
 
-            logger.info(
-                "File uploaded to S3: bucket={bucket_name}, key={key}".format(
-                    bucket_name=bucket_name, key=key
+                return await s3.generate_presigned_url(
+                    ClientMethod="get_object",
+                    Params={"Bucket": bucket_name, "Key": key},
+                    ExpiresIn=url_expiry,
                 )
-            )
-
-            url = await s3.generate_presigned_url(
-                ClientMethod="get_object",
-                Params={"Bucket": bucket_name, "Key": key},
-                ExpiresIn=url_expiry,
-            )
-
-        return url
+            except StorageError:
+                raise
+            except Exception as error:
+                raise _translate_storage_error(
+                    error,
+                    "Failed to upload file to storage",
+                ) from error
 
     async def upload_bytes(
         self,
+        *,
         data: bytes,
         key: str,
         bucket_name: str,
         content_type: str | None = None,
         metadata: dict[str, str] | None = None,
-    ) -> None:
-        """Upload raw bytes to S3-compatible storage."""
-        async with self._session.client(
-            "s3",
-            endpoint_url=self.endpoint_url,
-        ) as s3:
+    ) -> StoredObject:
+        async with self._session.client("s3", **self._client_kwargs()) as s3:
             extra_args = {}
             if content_type:
                 extra_args["ContentType"] = content_type
             if metadata:
                 extra_args["Metadata"] = metadata
 
-            logger.info(
-                "Uploading bytes to S3: bucket={bucket_name}, key={key}".format(
-                    bucket_name=bucket_name, key=key
+            logger.info("Uploading bytes to storage.")
+            try:
+                await s3.upload_fileobj(
+                    Fileobj=BytesIO(data),
+                    Bucket=bucket_name,
+                    Key=key,
+                    ExtraArgs=extra_args if extra_args else None,
                 )
-            )
-            await s3.upload_fileobj(
-                Fileobj=BytesIO(data),
-                Bucket=bucket_name,
-                Key=key,
-                ExtraArgs=extra_args if extra_args else None,
-            )
+            except StorageError:
+                raise
+            except Exception as error:
+                raise _translate_storage_error(
+                    error,
+                    "Failed to upload file bytes to storage",
+                ) from error
+
+        return StoredObject(
+            bucket_name=bucket_name,
+            key=key,
+            content_type=content_type,
+            size=len(data),
+            metadata=metadata,
+        )
+
+    async def upload_fileobj(
+        self,
+        *,
+        fileobj: BinaryIO,
+        key: str,
+        bucket_name: str,
+        content_type: str | None = None,
+        metadata: dict[str, str] | None = None,
+        size: int | None = None,
+    ) -> StoredObject:
+        async with self._session.client("s3", **self._client_kwargs()) as s3:
+            extra_args = {}
+            if content_type:
+                extra_args["ContentType"] = content_type
+            if metadata:
+                extra_args["Metadata"] = metadata
+
+            logger.info("Uploading file object to storage.")
+            try:
+                await s3.upload_fileobj(
+                    Fileobj=fileobj,
+                    Bucket=bucket_name,
+                    Key=key,
+                    ExtraArgs=extra_args if extra_args else None,
+                )
+            except StorageError:
+                raise
+            except Exception as error:
+                raise _translate_storage_error(
+                    error,
+                    "Failed to upload file object to storage",
+                ) from error
+
+        resolved_size = size if size is not None else 0
+        return StoredObject(
+            bucket_name=bucket_name,
+            key=key,
+            content_type=content_type,
+            size=resolved_size,
+            metadata=metadata,
+        )
 
     async def delete_file(
         self,
         key: str,
         bucket_name: str,
     ) -> None:
-        """
-        Deletes a file from the specified S3 bucket.
-        Args:
-            key (str): Key (path) in the S3 bucket of the file to delete.
-            bucket_name (str): Name of the S3 bucket.
-        """
-        async with self._session.client(
-            "s3",
-            endpoint_url=self.endpoint_url,
-        ) as s3:
-            logger.info(
-                "Deleting file from S3: bucket={bucket_name}, key={key}".format(
-                    bucket_name=bucket_name, key=key
-                )
-            )
+        async with self._session.client("s3", **self._client_kwargs()) as s3:
+            logger.info("Deleting file from storage.")
 
-            await s3.delete_object(
-                Bucket=bucket_name,
-                Key=key,
-            )
-
-            logger.info(
-                "File deleted from S3: bucket={bucket_name}, key={key}".format(
-                    bucket_name=bucket_name, key=key
+            try:
+                await s3.delete_object(
+                    Bucket=bucket_name,
+                    Key=key,
                 )
-            )
+            except StorageError:
+                raise
+            except Exception as error:
+                raise _translate_storage_error(
+                    error,
+                    "Failed to delete file from storage",
+                ) from error
+
+            logger.info("File deleted from storage.")
 
     async def generate_presigned_download_url(
         self,
@@ -216,16 +317,20 @@ class S3:
         bucket_name: str,
         url_expiry: int = 3600,
     ) -> str:
-        """Generate a presigned download URL for an existing S3 object."""
-        async with self._session.client(
-            "s3",
-            endpoint_url=self.endpoint_url,
-        ) as s3:
-            return await s3.generate_presigned_url(
-                ClientMethod="get_object",
-                Params={"Bucket": bucket_name, "Key": key},
-                ExpiresIn=url_expiry,
-            )
+        async with self._session.client("s3", **self._client_kwargs()) as s3:
+            try:
+                return await s3.generate_presigned_url(
+                    ClientMethod="get_object",
+                    Params={"Bucket": bucket_name, "Key": key},
+                    ExpiresIn=url_expiry,
+                )
+            except StorageError:
+                raise
+            except Exception as error:
+                raise _translate_storage_error(
+                    error,
+                    "Failed to generate download URL",
+                ) from error
 
     async def download_bytes(
         self,
@@ -233,33 +338,39 @@ class S3:
         key: str,
         bucket_name: str,
     ) -> tuple[bytes, str | None]:
-        """Download an object from S3-compatible storage into memory."""
-        async with self._session.client(
-            "s3",
-            endpoint_url=self.endpoint_url,
-        ) as s3:
-            logger.info(
-                "Downloading file from S3: bucket={bucket_name}, key={key}".format(
-                    bucket_name=bucket_name, key=key
+        async with self._session.client("s3", **self._client_kwargs()) as s3:
+            logger.info("Downloading file from storage.")
+            try:
+                response = await s3.get_object(
+                    Bucket=bucket_name,
+                    Key=key,
                 )
-            )
-            response = await s3.get_object(
-                Bucket=bucket_name,
-                Key=key,
-            )
-            body = await response["Body"].read()
+                body = await response["Body"].read()
+            except StorageError:
+                raise
+            except Exception as error:
+                raise _translate_storage_error(
+                    error,
+                    "Failed to download file from storage",
+                ) from error
             return body, response.get("ContentType")
 
 
 def get_s3_client() -> S3:
+    if CONFIG.STORAGE_BACKEND == "aws":
+        return S3(region_name=CONFIG.STORAGE_REGION)
+
     endpoint_url = CONFIG.MINIO_ENDPOINT
     if not endpoint_url.startswith(("http://", "https://")):
-        endpoint_url = f"http://{endpoint_url}"
+        scheme = "https" if CONFIG.MINIO_SECURE else "http"
+        endpoint_url = f"{scheme}://{endpoint_url}"
 
     return S3(
+        region_name=CONFIG.STORAGE_REGION,
         s3_access_key_id=CONFIG.MINIO_ROOT_USER,
         s3_secret_access_key=CONFIG.MINIO_ROOT_PASSWORD,
         endpoint_url=endpoint_url,
+        client_config=AioConfig(s3={"addressing_style": "path"}),
     )
 
 

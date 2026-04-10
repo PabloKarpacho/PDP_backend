@@ -1,5 +1,4 @@
 import datetime
-from typing import List
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,16 +11,13 @@ from src.routers.Lessons.schemas import (
     LessonCreateSchema,
     LessonUpdateSchema,
 )
-from src.routers.Lessons.crud import (
-    list_lessons,
-    create_lesson as create_lesson_record,
-    update_lesson as update_lesson_record,
-    soft_delete_lesson,
-)
-from src.routers.Lessons.utils import (
-    get_lesson_filters,
-    get_lesson_update_data,
-    serialize_lesson,
+from src.schemas import ResponseEnvelope, success_response
+from src.services.exceptions import ForbiddenError, NotFoundError, ValidationError
+from src.services.lessons import (
+    create_lesson_for_teacher,
+    delete_lesson_for_teacher,
+    list_lessons_for_user,
+    update_lesson_for_teacher,
 )
 
 
@@ -30,80 +26,222 @@ PREFIX = "/lessons"
 router = APIRouter(prefix=PREFIX, tags=["Lessons"])
 
 
-@router.get("")
+@router.get(
+    "",
+    response_model=ResponseEnvelope[list[LessonGetSchema]],
+)
 async def get_lessons(
     user: UserDAO = Depends(get_user),
     db: AsyncSession = Depends(get_db),
     start_time: datetime.datetime | None = None,
     end_time: datetime.datetime | None = None,
-) -> List[LessonGetSchema | None]:
-    lesson_filters = get_lesson_filters(user)
+) -> ResponseEnvelope[list[LessonGetSchema]]:
+    """
+    ### Purpose
+    List lessons visible to the current authenticated user.
 
-    if lesson_filters is None:
-        return []
+    ### Access
+    Available to authenticated teachers and students.
 
-    lessons = await list_lessons(
-        db,
+    ### Parameters
+    - **user** (UserDAO): The current authenticated application user.
+    - **db** (AsyncSession): Active database session.
+    - **start_time** (datetime.datetime | None): Optional lower bound for lesson
+    start time.
+    - **end_time** (datetime.datetime | None): Optional upper bound for lesson end
+    time.
+
+    ### Returns
+    - **ResponseEnvelope[list[LessonGetSchema]]**: Lessons available to the current
+    teacher or student, optionally filtered by the requested time window.
+    """
+    logger.info(
+        "Lessons list requested.",
+        extra={
+            "user_id": user.id,
+            "role": user.role,
+            "has_start_time_filter": start_time is not None,
+            "has_end_time_filter": end_time is not None,
+        },
+    )
+    lessons = await list_lessons_for_user(
+        db=db,
+        user=user,
         start_time=start_time,
         end_time=end_time,
-        **lesson_filters,
     )
-    return [serialize_lesson(lesson) for lesson in lessons]
+    return success_response(lessons)
 
 
-@router.post("/create")
+@router.post(
+    "/create",
+    response_model=ResponseEnvelope[LessonGetSchema],
+)
 async def create_lesson(
     lesson: LessonCreateSchema,
     user: UserDAO = Depends(get_teacher),
     db: AsyncSession = Depends(get_db),
-) -> LessonGetSchema:
-    lesson_dao = await create_lesson_record(
-        db,
-        start_time=lesson.start_time,
-        end_time=lesson.end_time,
-        theme=lesson.theme,
-        lesson_description=lesson.lesson_description,
-        teacher_id=user.id,
-        student_id=lesson.student_id,
-        status=lesson.status,
+) -> ResponseEnvelope[LessonGetSchema]:
+    """
+    ### Purpose
+    Create a lesson for the current authenticated teacher.
+
+    ### Access
+    Available only to authenticated teachers.
+
+    ### Parameters
+    - **lesson** (LessonCreateSchema): Input payload describing the lesson to
+    schedule.
+    - **user** (UserDAO): The current authenticated teacher.
+    - **db** (AsyncSession): Active database session.
+
+    ### Returns
+    - **ResponseEnvelope[LessonGetSchema]**: The created lesson after validation
+    and teacher-student relation checks succeed.
+    """
+    logger.info(
+        "Lesson creation requested.",
+        extra={
+            "user_id": user.id,
+            "student_id": lesson.student_id,
+            "status": lesson.status,
+        },
     )
-    return serialize_lesson(lesson_dao)
+    try:
+        lesson_data = await create_lesson_for_teacher(db=db, user=user, lesson=lesson)
+        logger.info(
+            "Lesson created successfully.",
+            extra={"user_id": user.id, "lesson_id": lesson_data.id},
+        )
+        return success_response(lesson_data)
+    except ValidationError as error:
+        logger.error(
+            "Lesson creation rejected by validation.",
+            extra={"user_id": user.id, "error_type": type(error).__name__},
+        )
+        raise HTTPException(400, str(error)) from error
+    except ForbiddenError as error:
+        logger.error(
+            "Lesson creation forbidden by relation policy.",
+            extra={"user_id": user.id, "student_id": lesson.student_id},
+        )
+        raise HTTPException(403, str(error)) from error
 
 
-@router.put("/update/{lesson_id}")
+@router.put(
+    "/update/{lesson_id}",
+    response_model=ResponseEnvelope[LessonGetSchema],
+)
 async def update_lesson(
     lesson: LessonUpdateSchema,
     lesson_id: int,
     user: UserDAO = Depends(get_teacher),
     db: AsyncSession = Depends(get_db),
-) -> LessonGetSchema:
-    logger.info(f"Received update request for lesson {lesson_id} with data: {lesson}")
-    lesson_dao = await update_lesson_record(
-        db,
-        lesson_id=lesson_id,
-        teacher_id=user.id,
-        **get_lesson_update_data(lesson),
+) -> ResponseEnvelope[LessonGetSchema]:
+    """
+    ### Purpose
+    Update one lesson owned by the current authenticated teacher.
+
+    ### Access
+    Available only to authenticated teachers.
+
+    ### Parameters
+    - **lesson** (LessonUpdateSchema): Partial lesson payload with fields to
+    change.
+    - **lesson_id** (int): Identifier of the lesson to update.
+    - **user** (UserDAO): The current authenticated teacher.
+    - **db** (AsyncSession): Active database session.
+
+    ### Returns
+    - **ResponseEnvelope[LessonGetSchema]**: The updated lesson record after
+    validation, ownership checks and status transition rules are applied.
+    """
+    logger.info(
+        "Lesson update requested.",
+        extra={
+            "user_id": user.id,
+            "lesson_id": lesson_id,
+            "fields": sorted(lesson.model_dump(exclude_unset=True).keys()),
+        },
     )
-
-    if not lesson_dao:
+    try:
+        lesson_data = await update_lesson_for_teacher(
+            db=db,
+            lesson_id=lesson_id,
+            user=user,
+            lesson=lesson,
+        )
+        logger.info(
+            "Lesson updated successfully.",
+            extra={"user_id": user.id, "lesson_id": lesson_data.id},
+        )
+        return success_response(lesson_data)
+    except NotFoundError:
+        logger.error(
+            "Lesson update failed because lesson was not found.",
+            extra={"user_id": user.id, "lesson_id": lesson_id},
+        )
         raise HTTPException(404, "Lesson not found")
+    except ValidationError as error:
+        logger.error(
+            "Lesson update rejected by validation.",
+            extra={
+                "user_id": user.id,
+                "lesson_id": lesson_id,
+                "error_type": type(error).__name__,
+            },
+        )
+        raise HTTPException(400, str(error)) from error
+    except ForbiddenError as error:
+        logger.error(
+            "Lesson update forbidden by relation policy.",
+            extra={"user_id": user.id, "lesson_id": lesson_id},
+        )
+        raise HTTPException(403, str(error)) from error
 
-    return serialize_lesson(lesson_dao)
 
-
-@router.delete("/delete/{lesson_id}")
+@router.delete(
+    "/delete/{lesson_id}",
+    response_model=ResponseEnvelope[int],
+)
 async def delete_lesson(
     lesson_id: int,
     user: UserDAO = Depends(get_teacher),
     db: AsyncSession = Depends(get_db),
-) -> int:
-    lesson_dao = await soft_delete_lesson(
-        db,
-        lesson_id=lesson_id,
-        teacher_id=user.id,
+) -> ResponseEnvelope[int]:
+    """
+    ### Purpose
+    Soft-delete a lesson owned by the current authenticated teacher.
+
+    ### Access
+    Available only to authenticated teachers.
+
+    ### Parameters
+    - **lesson_id** (int): Identifier of the lesson to delete.
+    - **user** (UserDAO): The current authenticated teacher.
+    - **db** (AsyncSession): Active database session.
+
+    ### Returns
+    - **ResponseEnvelope[int]**: The identifier of the lesson that was deleted.
+    """
+    logger.info(
+        "Lesson deletion requested.",
+        extra={"user_id": user.id, "lesson_id": lesson_id},
     )
-
-    if not lesson_dao:
+    try:
+        lesson_id_result = await delete_lesson_for_teacher(
+            db=db,
+            lesson_id=lesson_id,
+            user=user,
+        )
+        logger.info(
+            "Lesson deleted successfully.",
+            extra={"user_id": user.id, "lesson_id": lesson_id_result},
+        )
+        return success_response(lesson_id_result)
+    except NotFoundError:
+        logger.error(
+            "Lesson deletion failed because lesson was not found.",
+            extra={"user_id": user.id, "lesson_id": lesson_id},
+        )
         raise HTTPException(404, "Lesson not found")
-
-    return lesson_dao.id

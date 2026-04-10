@@ -27,7 +27,7 @@ keycloak_openid = KeycloakOpenID(
     client_id=settings.client_id,
     realm_name=settings.realm,
     client_secret_key=settings.client_secret,
-    verify=False,
+    verify=CONFIG.KEYCLOAK_CA_BUNDLE or True,
 )
 
 
@@ -45,30 +45,52 @@ async def get_payload(token: str = Depends(oauth2_scheme)) -> dict:
     try:
         decode = keycloak_openid.decode_token(token, validate=True)
         return decode
-    except Exception as e:
+    except Exception as error:
+        logger.error(
+            "Token validation failed.",
+            extra={"error_type": type(error).__name__},
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e),  # "Invalid authentication credentials",
+            detail="Invalid authentication credentials",
             headers={"WWW-Authenticate": "Bearer"},
-        )
+        ) from error
 
 
 async def get_user_info(payload: dict = Depends(get_payload)) -> KeycloakUser:
     try:
-        logger.info(f"Payload: {payload}")
         realm_roles = payload.get("realm_access", {}).get("roles", [])
-        return KeycloakUser(
+        if not realm_roles and payload.get("role") is not None:
+            realm_roles = [payload.get("role")]
+
+        user = KeycloakUser(
             id=payload.get("sub"),
-            username=payload.get("name"),
+            username=payload.get("preferred_username") or payload.get("name"),
             email=payload.get("email"),
-            first_name=payload.get("given_name"),
+            first_name=payload.get("given_name") or payload.get("name"),
+            last_name=payload.get("family_name") or payload.get("last_name"),
             phone=payload.get("phone"),
-            role=payload.get("role"),
             realm_roles=realm_roles,
         )
-    except Exception as e:
+        logger.info(
+            "Resolved authenticated user from token.",
+            extra={
+                "user_id": user.id,
+                "username": user.username,
+                "realm_roles": user.realm_roles,
+            },
+        )
+        return user
+    except Exception as error:
+        logger.error(
+            "Failed to map authentication payload to user.",
+            extra={
+                "error_type": type(error).__name__,
+                "payload_keys": sorted(payload.keys()),
+            },
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),  # "Invalid authentication credentials",
+            detail="Invalid authentication payload",
             headers={"WWW-Authenticate": "Bearer"},
-        )
+        ) from error

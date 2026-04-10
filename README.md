@@ -1,5 +1,7 @@
 # PDP Backend
 
+[![codecov](https://codecov.io/gh/PabloKarpacho/PDP_backend/graph/badge.svg?token=O2mbV4lXaV)](https://codecov.io/gh/PabloKarpacho/PDP_backend)
+
 Короткая инструкция по локальному запуску проекта через Docker Compose.
 
 ## Что поднимается
@@ -25,26 +27,53 @@ cp env.example .env
 
 Если `.env` уже есть, проверьте в нём порты и доступы.
 
-2. Запустите проект:
+2. Сгенерируйте self-signed сертификаты для backend и Keycloak:
+
+Backend сертификат для локального HTTPS на `https://localhost`:
+
+```bash
+mkdir -p certs/backend certs/keycloak
+
+openssl req -x509 -nodes -newkey rsa:2048 -sha256 -days 365 \
+  -keyout certs/backend/key.pem \
+  -out certs/backend/cert.pem \
+  -subj "/CN=localhost" \
+  -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+```
+
+Keycloak сертификат для внутреннего compose hostname `pdp-keycloak` и локального доступа с хоста:
+
+```bash
+openssl req -x509 -nodes -newkey rsa:2048 -sha256 -days 365 \
+  -keyout certs/keycloak/key.pem \
+  -out certs/keycloak/cert.pem \
+  -subj "/CN=pdp-keycloak" \
+  -addext "subjectAltName=DNS:pdp-keycloak,DNS:localhost,IP:127.0.0.1"
+```
+
+Если Keycloak должен открываться по внешнему IP или доменному имени, добавьте их в `subjectAltName`.
+
+3. Запустите проект:
 
 ```bash
 docker compose up -d --build
 ```
 
-3. Примените миграции явной командой:
+4. Примените миграции командой:
 
 ```bash
 uv run python -m alembic upgrade head
 ```
 
-Это единственный поддерживаемый путь миграций для local/dev и production.
-Приложение больше не применяет миграции во время runtime startup.
-
-4. Проверьте, что контейнеры поднялись:
+5. Проверьте, что контейнеры поднялись:
 
 ```bash
 docker compose ps
 ```
+
+Backend использует свои сертификаты из `certs/backend`.
+Keycloak использует отдельные сертификаты из `certs/keycloak`.
+Backend проверяет TLS Keycloak через `KEYCLOAK_CA_BUNDLE`, который по умолчанию указывает на `./certs/keycloak/cert.pem` для локального запуска и переопределяется в контейнере на `/opt/certs/keycloak/cert.pem`.
 
 ## Миграции Alembic
 
@@ -114,6 +143,7 @@ docker compose down -v
 uv run pre-commit install
 uv run pre-commit run --all-files
 ```
+
 
 Хуки используют `ruff check --fix` и `ruff format`
 

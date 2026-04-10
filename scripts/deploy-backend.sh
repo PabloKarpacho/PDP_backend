@@ -5,38 +5,30 @@ set -euo pipefail
 APP_DIR="${APP_DIR:-/opt/PDP_backend}"
 BRANCH="${BRANCH:-main}"
 BACKEND_SERVICE="${BACKEND_SERVICE:-pdp-backend}"
-READINESS_ATTEMPTS="${READINESS_ATTEMPTS:-30}"
-READINESS_INTERVAL_SECONDS="${READINESS_INTERVAL_SECONDS:-2}"
-READINESS_TIMEOUT_SECONDS="${READINESS_TIMEOUT_SECONDS:-5}"
 
+resolve_keycloak_db_password() {
+  if [ -n "${KC_DB_PASSWORD:-}" ]; then
+    return
+  fi
 
-wait_for_readiness() {
-  local attempt
+  local secret_id="${KC_DB_AWS_SECRET_ID:-}"
+  local region="${KC_DB_AWS_REGION:-${AWS_POSTGRES_REGION:-}}"
 
-  for attempt in $(seq 1 "$READINESS_ATTEMPTS"); do
-    if curl \
-      --fail \
-      --silent \
-      --show-error \
-      --connect-timeout "$READINESS_TIMEOUT_SECONDS" \
-      --max-time "$READINESS_TIMEOUT_SECONDS" \
-      "$READINESS_URL" >/dev/null 2>&1; then
-      echo "Backend is ready"
-      return 0
-    fi
+  if [ -z "$secret_id" ]; then
+    return
+  fi
 
-    if [ "$attempt" -lt "$READINESS_ATTEMPTS" ]; then
-      echo "Readiness probe failed (attempt ${attempt}/${READINESS_ATTEMPTS}), retrying in ${READINESS_INTERVAL_SECONDS}s"
-      sleep "$READINESS_INTERVAL_SECONDS"
-      continue
-    fi
-
-    echo "Readiness probe failed (attempt ${attempt}/${READINESS_ATTEMPTS})"
-  done
-
-  return 1
+  echo "==> Resolving Keycloak database password from AWS Secrets Manager"
+  KC_DB_PASSWORD="$(
+    docker compose run --rm --no-deps \
+      -e KC_DB_PASSWORD="${KC_DB_PASSWORD:-}" \
+      -e KC_DB_AWS_SECRET_ID="$secret_id" \
+      -e KC_DB_AWS_REGION="$region" \
+      "$BACKEND_SERVICE" \
+      uv run python -m src.services.keycloak_secret
+  )"
+  export KC_DB_PASSWORD
 }
-
 
 print_backend_diagnostics() {
   echo "==> Backend container status"
@@ -67,27 +59,26 @@ set -a
 source ./.env
 set +a
 
-APP_PORT="${APP_PORT:-8000}"
-READINESS_URL="http://localhost:${APP_PORT}/actuator/health/readiness"
-
 echo "==> Building backend image"
 docker compose build "$BACKEND_SERVICE"
 
+resolve_keycloak_db_password
+
 echo "==> Starting dependencies"
-docker compose up -d pdp-db pdp-minio pdp-keycloak
+docker compose up -d pdp-keycloak
 
 echo "==> Applying database migrations"
 docker compose run --rm "$BACKEND_SERVICE" uv run python -m alembic upgrade head
 
-echo "==> Starting backend"
-docker compose up -d "$BACKEND_SERVICE"
+echo "==> Removing previous backend container"
+docker compose rm -fsv "$BACKEND_SERVICE" || true
 
-echo "==> Waiting for readiness at $READINESS_URL"
-if wait_for_readiness; then
+echo "==> Starting backend"
+if docker compose up -d --force-recreate "$BACKEND_SERVICE"; then
   docker image prune -f
   exit 0
 fi
 
 print_backend_diagnostics
-echo "Backend failed readiness check: $READINESS_URL"
+echo "Backend container failed to start"
 exit 1

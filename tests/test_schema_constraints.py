@@ -78,6 +78,24 @@ async def test_teachers_students_requires_existing_users(schema_db) -> None:
 
 
 @pytest.mark.asyncio
+async def test_teachers_students_rejects_self_links(schema_db) -> None:
+    session = schema_db.session
+    await _create_user(session, user_id="teacher-1", role="teacher")
+
+    relation = TeachersStudentsDAO(
+        teacher_id="teacher-1",
+        student_id="teacher-1",
+        status="active",
+    )
+    session.add(relation)
+
+    with pytest.raises(IntegrityError):
+        await session.commit()
+
+    await session.rollback()
+
+
+@pytest.mark.asyncio
 async def test_lessons_enforce_user_foreign_keys_and_one_to_one_homework(
     schema_db,
 ) -> None:
@@ -167,3 +185,18 @@ async def test_expected_lesson_indexes_exist(schema_db) -> None:
 
     assert ("teacher_id", "start_time") in indexed_columns
     assert ("student_id", "start_time") in indexed_columns
+
+
+@pytest.mark.asyncio
+async def test_expected_relation_indexes_exist(schema_db) -> None:
+    async with schema_db.engine.begin() as connection:
+        relation_indexes = await connection.run_sync(
+            lambda sync_connection: inspect(sync_connection).get_indexes(
+                "teachers_students"
+            )
+        )
+
+    indexed_columns = {tuple(index["column_names"]) for index in relation_indexes}
+
+    assert ("teacher_id", "status") in indexed_columns
+    assert ("student_id", "status") in indexed_columns

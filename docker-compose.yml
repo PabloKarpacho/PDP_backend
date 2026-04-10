@@ -1,57 +1,6 @@
 version: "3.8"
 
 services:
-  pdp-db:
-    image: postgres:13
-    container_name: postgres_db
-    restart: always
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_MULTIPLE_DATABASES: ${KC_DB_NAME}, ${POSTGRES_DB}
-    ports:
-      - "${POSTGRES_PORT}:${POSTGRES_PORT}"
-    env_file:
-      - ".env"
-    volumes:
-      - ./postgres-init/init-multiple-db.sh:/docker-entrypoint-initdb.d/init-multiple-db.sh
-    networks:
-      - pdp-network
-    deploy:
-      resources:
-        limits:
-          cpus: "0.25"
-          memory: 256M
-        reservations:
-          cpus: "0.1"
-          memory: 128M
-
-  pdp-minio:
-    image: quay.io/minio/minio
-    container_name: minio
-    restart: always
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-    ports:
-      - "${MINIO_API_PORT}:9000"
-      - "${MINIO_CONSOLE_PORT}:7001"
-    env_file:
-      - ".env"
-    volumes:
-      - ./data/minio:/data
-    networks:
-      - pdp-network
-    command: server /data --console-address ":${MINIO_CONSOLE_PORT}"
-    deploy:
-      resources:
-        limits:
-          cpus: "0.4"
-          memory: 320M
-        reservations:
-          cpus: "0.2"
-          memory: 160M
-
   pdp-backend:
     build:
       context: .
@@ -62,14 +11,12 @@ services:
       - "${APP_PORT}:${APP_PORT}"
     env_file:
       - ".env"
-    depends_on:
-      - pdp-db
-      - pdp-minio
-      - pdp-keycloak
     environment:
       POSTGRESQL_DSN: ${DOCKER_POSTGRESQL_DSN}
       MINIO_ENDPOINT: ${DOCKER_MINIO_ENDPOINT}
-      KEYCLOACK_HOST_URL: ${DOCKER_KEYCLOACK_HOST_URL}
+      KEYCLOAK_HOST_URL: https://pdp-keycloak:8443
+      KEYCLOAK_PUBLIC_URL: https://${KC_HOSTNAME}:${KEYCLOAK_PORT}
+      KEYCLOAK_CA_BUNDLE: /opt/certs/keycloak/cert.pem
     volumes:
       - .:/work
     networks:
@@ -84,7 +31,9 @@ services:
           memory: 128M
 
   pdp-keycloak:
-    image: quay.io/keycloak/keycloak:23.0.7
+    build:
+      context: .
+      dockerfile: Dockerfile_keycloak.dockerfile
     container_name: keycloak
     restart: always
     environment:
@@ -94,9 +43,12 @@ services:
       KC_DB_PASSWORD: ${KC_DB_PASSWORD}
       KC_DB_NAME: ${KC_DB_NAME}
       KC_HOSTNAME: ${KC_HOSTNAME}
-      KC_HOSTNAME_PORT: ${KC_HOSTNAME_PORT}
-      KC_HOSTNAME_STRICT: ${KC_HOSTNAME_STRICT}
-      KC_HOSTNAME_STRICT_HTTPS: ${KC_HOSTNAME_STRICT_HTTPS}
+      KC_HOSTNAME_PORT: ${KEYCLOAK_PORT}
+      KC_HOSTNAME_STRICT: "true"
+      KC_HOSTNAME_STRICT_HTTPS: "true"
+      KC_HTTP_ENABLED: "false"
+      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/cert.pem
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
       KC_LOG_LEVEL: ${KC_LOG_LEVEL}
       KC_METRICS_ENABLED: ${KC_METRICS_ENABLED}
       KC_HEALTH_ENABLED: ${KC_HEALTH_ENABLED}
@@ -104,14 +56,13 @@ services:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
     ports:
-      - "${KEYCLOAK_PORT}:8080"
+      - "${KEYCLOAK_PORT}:8443"
     env_file:
       - ".env"
-    depends_on:
-      - pdp-db
     networks:
       - pdp-network
     volumes:
+      - .:/work:ro #needed for getting aws certificates which let communication with postgres
       - ./realm-export.json:/opt/keycloak/data/import/realm-export.json
       - ./themes:/opt/keycloak/themes
     command: start-dev --http-enabled=true --import-realm
@@ -128,6 +79,3 @@ networks:
   pdp-network:
     name: pdp-network
     driver: bridge
-
-volumes:
-  postgres-init:

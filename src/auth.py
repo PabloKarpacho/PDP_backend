@@ -27,7 +27,7 @@ keycloak_openid = KeycloakOpenID(
     client_id=settings.client_id,
     realm_name=settings.realm,
     client_secret_key=settings.client_secret,
-    verify=CONFIG.KEYCLOAK_CA_BUNDLE or True,
+    verify=CONFIG.KEYCLOAK_CA_BUNDLE or False,
 )
 
 

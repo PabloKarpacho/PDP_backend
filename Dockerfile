@@ -36,7 +36,8 @@ RUN useradd --create-home appuser && \
     setcap 'cap_net_bind_service=+ep' "$(readlink -f /usr/local/bin/python3)" && \
     if [ -f /opt/certs/backend/cert.pem ]; then chmod 644 /opt/certs/backend/cert.pem; fi && \
     if [ -f /opt/certs/backend/key.pem ]; then chmod 600 /opt/certs/backend/key.pem; fi && \
-    if [ -f /opt/certs/keycloak/cert.pem ]; then chmod 644 /opt/certs/keycloak/cert.pem; fi
+    if [ -f /opt/certs/keycloak/cert.pem ]; then chmod 644 /opt/certs/keycloak/cert.pem; fi && \
+    if [ -f /opt/certs/global-bundle.pem ]; then chmod 644 /opt/certs/global-bundle.pem; fi
 USER appuser
 
 EXPOSE 80
